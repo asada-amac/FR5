@@ -728,7 +728,10 @@ async function submitAllDataToGAS() {
       file: baseFileName,
       types: {
         line: baseFileName,
-        point: baseFileName
+        polyline: baseFileName,
+        linestring: baseFileName,
+        point: baseFileName,
+        points: baseFileName
       }
     });
 
