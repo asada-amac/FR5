@@ -2,7 +2,8 @@
 // 1. CONFIGURATION
 // ==========================================
 var SPREADSHEET_ID = "1kSUf7P5D97oQ4JOhAHTyCPAsDE3gcKLRfnKfxsho8OI";
-var DRIVE_FOLDER_ID = "1vuPqSRlshqLwVQqhoTVT44jm6DA0TvrJ";
+var DRIVE_FOLDER_ID = "1vuPqSRlshqLwVQqhoTVT44jm6DA0TvrJ"; // 写真保存用フォルダ
+var SHP_FOLDER_ID = "1H-3icPudMe_X_yFo8FuccXsjzcXjch6R";   // トラックSHP ZIP保存用フォルダ
 
 // シート名定義
 var SURVEY_SHEET_NAME = "現地調査結果";
@@ -13,8 +14,6 @@ var TRACK_SHEET_NAME = "トラックデータ";
 // 2. MAIN POST ENDPOINT (CORS対応)
 // ==========================================
 function doPost(e) {
-  // CORSプリフライトや通常レスポンスのヘッダーはGoogle Apps Script側で自動処理されますが、
-  // エラー回避のためレスポンスを適切なMIMEタイプ（JSON）で返却します。
   try {
     if (!e || !e.postData || !e.postData.contents) {
       return createJsonResponse({
@@ -57,7 +56,8 @@ function createJsonResponse(obj) {
 // ==========================================
 function processUpload(payload) {
   var surveys = payload.surveys || [];
-  var tracks = payload.tracks || [];
+  var trackZip = payload.trackZip || "";
+  var trackZipName = payload.trackZipName || "";
 
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var driveFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
@@ -95,45 +95,25 @@ function processUpload(payload) {
     insertedSurveysCount++;
   }
 
-  // 2. トラックデータの処理
-  var trackSheet = getOrCreateTrackSheet(ss);
-  var insertedTracksCount = 0;
-
-  if (tracks.length > 0) {
-    // 大量データの高速書き込みのため、二次元配列に展開して一挙に書き込む
-    var trackRows = [];
-    for (var j = 0; j < tracks.length; j++) {
-      var track = tracks[j];
+  // 2. トラックSHP ZIPデータのGoogleドライブ保存（スプレッドシートへの個別座標追記は廃止）
+  var isTrackSaved = 0;
+  if (trackZip && trackZipName) {
+    try {
+      var shpFolder = DriveApp.getFolderById(SHP_FOLDER_ID);
+      var decodedZip = Utilities.base64Decode(trackZip);
+      var zipBlob = Utilities.newBlob(decodedZip, "application/zip", trackZipName);
       
-      // タイムスタンプを人が読みやすい日時形式に変換
-      var formattedDate = "";
-      if (track.timestamp) {
-        var d = new Date(track.timestamp);
-        formattedDate = Utilities.formatDate(d, "JST", "yyyy-MM-dd HH:mm:ss");
-      }
-
-      // 項目順: 調査ID, タイムスタンプ, 緯度, 経度
-      trackRows.push([
-        track.sessionId || "",
-        formattedDate || track.timestamp,
-        track.lat,
-        track.lng
-      ]);
-    }
-
-    if (trackRows.length > 0) {
-      // 最終行の次の行から書き込む
-      var lastRow = trackSheet.getLastRow();
-      var startRow = lastRow + 1;
-      var range = trackSheet.getRange(startRow, 1, trackRows.length, 4);
-      range.setValues(trackRows);
-      insertedTracksCount = trackRows.length;
+      shpFolder.createFile(zipBlob);
+      isTrackSaved = 1; // 1ファイルを保存
+    } catch (err) {
+      Logger.log("SHP ZIPの保存に失敗: " + err.toString());
+      throw new Error("SHP ZIPの保存失敗: " + err.toString());
     }
   }
 
   return {
     insertedSurveys: insertedSurveysCount,
-    insertedTracks: insertedTracksCount
+    insertedTracks: isTrackSaved
   };
 }
 

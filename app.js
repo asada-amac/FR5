@@ -623,6 +623,19 @@ function getMarkerColorByCategory(cat) {
 // ==========================================
 // 7. GAS POST DATA SENDING
 // ==========================================
+// BlobをBase64文字列に変換するヘルパー (ヘッダー部分を除去)
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    reader.onloadend = () => {
+      const base64data = reader.result.split(",")[1];
+      resolve(base64data);
+    };
+    reader.onerror = reject;
+  });
+}
+
 async function submitAllDataToGAS() {
   const surveyCount = await db.surveys.count();
   const trackCount = await db.tracks.count();
@@ -637,7 +650,7 @@ async function submitAllDataToGAS() {
     return;
   }
 
-  if (!confirm(`端末内に保存されている調査データ ${surveyCount} 件と軌跡データ ${trackCount} 点をGoogleスプレッドシートへ送信しますか？`)) {
+  if (!confirm(`端末内に保存されている調査データ ${surveyCount} 件と軌跡データ ${trackCount} 点をパッケージしてGoogleクラウドへ送信しますか？`)) {
     return;
   }
 
@@ -650,13 +663,82 @@ async function submitAllDataToGAS() {
 
   // データの取り出し
   const surveys = await db.surveys.toArray();
-  const tracks = await db.tracks.toArray();
+  const tracks = await db.tracks.orderBy("timestamp").toArray();
 
-  loadingText.innerText = `Googleサーバーへ送信中 (調査 ${surveys.length}件 / 軌跡 ${tracks.length}点)...`;
+  let trackZipBase64 = "";
+  let trackZipName = "";
+
+  // トラック軌跡データが存在する場合、ブラウザ側でSHP (ZIP) ファイルを自動生成
+  if (tracks.length > 0) {
+    loadingText.innerText = "軌跡データをGIS (SHP) 形式にブラウザ内で高速変換中...";
+
+    // 1. トラックデータをGeoJSON LineStringにコンバート
+    const coordinates = tracks.map(t => [t.lng, t.lat]);
+    const geojson = {
+      type: "FeatureCollection",
+      features: []
+    };
+
+    const startTime = new Date(tracks[0].timestamp);
+    const yyyy = startTime.getFullYear();
+    const mm = String(startTime.getMonth() + 1).padStart(2, '0');
+    const dd = String(startTime.getDate()).padStart(2, '0');
+    const hh = String(startTime.getHours()).padStart(2, '0');
+    const min = String(startTime.getMinutes()).padStart(2, '0');
+    
+    const yyyymmdd = `${yyyy}${mm}${dd}`;
+    const hhmm = `${hh}${min}`;
+    const username = tracks[0].username || "匿名調査員";
+    const cleanUsername = username.replace(/[\\/:*?"<>|]/g, "_");
+    trackZipName = `${yyyymmdd}_${hhmm}_${cleanUsername}_line.zip`;
+
+    if (coordinates.length === 1) {
+      geojson.features.push({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: coordinates[0]
+        },
+        properties: {
+          id: tracks[0].sessionId || "single_point",
+          surveyor: username,
+          time: startTime.toISOString()
+        }
+      });
+    } else {
+      geojson.features.push({
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: coordinates
+        },
+        properties: {
+          id: tracks[0].sessionId || "track_line",
+          surveyor: username,
+          start: startTime.toISOString(),
+          end: new Date(tracks[tracks.length - 1].timestamp).toISOString()
+        }
+      });
+    }
+
+    const baseFileName = trackZipName.replace(".zip", "");
+    const zipBlob = await shpwrite.zip(geojson, {
+      compression: "STORE",
+      outputType: "blob",
+      filename: baseFileName,
+      file: baseFileName
+    });
+
+    // Blob を Base64 文字列にエンコード
+    trackZipBase64 = await blobToBase64(zipBlob);
+  }
+
+  loadingText.innerText = `Googleサーバーへ送信中 (調査 ${surveys.length}件 / GIS-SHP ZIP 1件)...`;
 
   const payload = {
     surveys: surveys,
-    tracks: tracks
+    trackZip: trackZipBase64,
+    trackZipName: trackZipName
   };
 
   try {
@@ -665,7 +747,7 @@ async function submitAllDataToGAS() {
       method: "POST",
       mode: "cors",
       headers: {
-        "Content-Type": "text/plain" // GASのCORS制約を回避するためプレーンテキストで送るのが無難
+        "Content-Type": "text/plain"
       },
       body: JSON.stringify(payload)
     });
@@ -675,7 +757,8 @@ async function submitAllDataToGAS() {
 
     if (result.status === "success") {
       loadingOverlay.style.display = "none";
-      alert(`送信成功しました！\n\n・調査データ: ${result.insertedSurveys} 件\n・軌跡ポイント: ${result.insertedTracks} 点\n\n端末内の送信済みデータをリセットします。`);
+      const shpMessage = trackZipName ? `\n・軌跡SHPファイル: Googleドライブへ保存完了 (${trackZipName})` : "";
+      alert(`送信成功しました！\n\n・調査データ: ${result.insertedSurveys} 件 (スプレッドシート書き込み完了)${shpMessage}\n\n端末内の送信済みデータをリセットします。`);
       
       // 送信成功したため端末のIndexedDBを消去
       await db.surveys.clear();
