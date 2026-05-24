@@ -727,11 +727,17 @@ async function submitAllDataToGAS() {
       filename: baseFileName,
       file: baseFileName,
       types: {
+        // 大文字小文字や複数形のブレを完璧に網羅して上書きを強制適用
         line: baseFileName,
+        Line: baseFileName,
         polyline: baseFileName,
+        Polyline: baseFileName,
         linestring: baseFileName,
+        LineString: baseFileName,
         point: baseFileName,
-        points: baseFileName
+        Point: baseFileName,
+        points: baseFileName,
+        Points: baseFileName
       }
     });
 
