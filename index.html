@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>現地調査モバイル Web App</title>
+  
+  <!-- CSS CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --accent-color: #06b6d4; /* シアン/ネオンブルー */
+      --accent-success: #10b981; /* エメラルド/グリーン */
+      --accent-warning: #f59e0b; /* アンバー */
+      --accent-danger: #ef4444; /* レッド */
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Outfit', 'Noto Sans JP', sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ガラスモルフィズムスタイル */
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    /* ヘッダー */
+    header {
+      padding: 12px 16px;
+      z-index: 1030;
+      border-bottom: 1px solid var(--glass-border);
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(8px);
+    }
+
+    header h1 {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      background: linear-gradient(to right, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0;
+    }
+
+    /* メインコンテンツエリア */
+    main {
+      flex: 1;
+      position: relative;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-bottom: 75px; /* ボトムナビゲーション用の余白 */
+    }
+
+    /* タブ切り替え制御 */
+    .app-tab-content {
+      display: none;
+      height: 100%;
+      width: 100%;
+    }
+
+    .app-tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* マップエリア */
+    #map-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: calc(100vh - 135px);
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* マップ上のフローティングコントロール */
+    .map-overlay-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .map-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(8px);
+    }
+
+    .map-btn:active {
+      transform: scale(0.9);
+      background: var(--accent-color);
+    }
+
+    .map-tracking-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 10px;
+      right: 10px;
+      z-index: 1000;
+      padding: 12px 16px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    /* ボトムナビゲーションバー */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 65px;
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--glass-border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 1030;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .nav-item-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 6px 0;
+      transition: all 0.2s;
+    }
+
+    .nav-item-btn i {
+      font-size: 1.3rem;
+      margin-bottom: 4px;
+      transition: all 0.2s;
+    }
+
+    .nav-item-btn.active {
+      color: var(--accent-color);
+    }
+
+    .nav-item-btn.active i {
+      transform: translateY(-2px);
+      text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+    }
+
+    /* ログインモーダル */
+    .login-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(15, 23, 42, 0.95);
+      z-index: 2000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .login-card {
+      max-width: 400px;
+      width: 100%;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .login-card h2 {
+      font-weight: 800;
+      margin-bottom: 20px;
+      background: linear-gradient(to right, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* カスタムフォームコントロール */
+    .form-control, .form-select {
+      background-color: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      border-radius: 8px;
+    }
+
+    .form-control:focus, .form-select:focus {
+      background-color: rgba(15, 23, 42, 0.8);
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 0.25rem rgba(6, 182, 212, 0.25);
+      color: var(--text-main);
+    }
+
+    .form-label {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+
+    /* 写真撮影エリア */
+    .photo-capture-wrapper {
+      border: 2px dashed var(--glass-border);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      background: rgba(15, 23, 42, 0.3);
+      transition: all 0.3s;
+    }
+
+    .photo-capture-wrapper:hover {
+      border-color: var(--accent-color);
+      background: rgba(6, 182, 212, 0.05);
+    }
+
+    .photo-preview {
+      width: 100%;
+      max-height: 180px;
+      object-fit: cover;
+      border-radius: 8px;
+      display: none;
+      margin-top: 10px;
+    }
+
+    /* ボタンカスタマイズ */
+    .btn-gradient-primary {
+      background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+      color: white;
+      border: none;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .btn-gradient-primary:hover {
+      background: linear-gradient(135deg, #0891b2 0%, #2563eb 100%);
+      transform: translateY(-1px);
+    }
+
+    .btn-gradient-success {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      font-weight: 600;
+    }
+
+    /* カウンターバッジ */
+    .badge-count {
+      position: absolute;
+      top: 5px;
+      right: 25%;
+      background: var(--accent-warning);
+      color: #0f172a;
+      font-weight: 700;
+      font-size: 0.65rem;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* 送信ローディング画面 */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(15, 23, 42, 0.85);
+      z-index: 3000;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(5px);
+    }
+
+    .spinner-neon {
+      width: 3rem;
+      height: 3rem;
+      border: 0.25em solid rgba(6, 182, 212, 0.2);
+      border-left-color: var(--accent-color);
+      border-radius: 50%;
+      animation: spinner-border .75s linear infinite;
+    }
+
+    /* ステータスドット */
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      background-color: var(--text-muted);
+    }
+    
+    .status-dot.active {
+      background-color: var(--accent-success);
+      box-shadow: 0 0 8px var(--accent-success);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.5; }
+      50% { opacity: 1; }
+      100% { opacity: 0.5; }
+    }
+
+    /* Leaflet カスタマイズ */
+    .leaflet-bar {
+      border: 1px solid var(--glass-border) !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+    }
+    .leaflet-bar a {
+      background-color: var(--glass-bg) !important;
+      color: var(--text-main) !important;
+      border-bottom: 1px solid var(--glass-border) !important;
+      backdrop-filter: blur(8px);
+    }
+    .leaflet-bar a:hover {
+      background-color: var(--accent-color) !important;
+      color: #0f172a !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 簡易ログインオーバーレイ -->
+  <div id="login-overlay" class="login-overlay">
+    <div class="glass-panel login-card">
+      <div class="mb-4">
+        <i class="fa-solid fa-map-location-dot fa-3x text-info"></i>
+      </div>
+      <h2>現地調査 Web App</h2>
+      <p class="text-secondary small mb-4">調査を開始する前に、あなたの調査者名を入力してください。</p>
+      <form id="login-form">
+        <div class="mb-3">
+          <input type="text" class="form-control text-center py-2" id="username-input" placeholder="調査者名を入力" required autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn-gradient-primary w-100 py-2 mt-2">
+          ログインして調査開始
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 送信中ローディング画面 -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner-neon mb-3"></div>
+    <h5 id="loading-text">GASサーバーへ送信中...</h5>
+    <p class="text-secondary small">この処理には数十秒かかる場合があります。閉じずにお待ちください。</p>
+  </div>
+
+  <!-- アプリヘッダー -->
+  <header class="d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center">
+      <i class="fa-solid fa-compass text-info me-2 fs-5"></i>
+      <h1>FIELD TRACKER</h1>
+    </div>
+    <div class="small d-flex align-items-center gap-3">
+      <div>
+        <span class="status-dot" id="gps-status-dot"></span>
+        <span class="text-secondary" id="gps-status-text">GPS Off</span>
+      </div>
+      <div>
+        <span class="badge bg-secondary py-1" id="badge-username">---</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main>
+    
+    <!-- TAB 1: マップ画面 -->
+    <div id="tab-map" class="app-tab-content active">
+      <div id="map-container">
+        <!-- マップ描画先 -->
+        <div id="map"></div>
+        
+        <!-- マップ上のフローティング操作系 -->
+        <div class="map-overlay-controls">
+          <div class="map-btn" id="btn-recenter" title="現在地に移動">
+            <i class="fa-solid fa-crosshairs"></i>
+          </div>
+        </div>
+
+        <!-- 調査ステータスパネル -->
+        <div class="glass-panel map-tracking-panel">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <span class="fw-bold text-info small">軌跡トラッキング</span>
+              <div class="text-secondary" style="font-size: 0.7rem;" id="track-stat">停止中</div>
+            </div>
+            <div>
+              <span class="badge bg-dark border border-secondary" id="track-count">0 点記録</span>
+            </div>
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <button class="btn btn-sm btn-gradient-primary w-100 py-2" id="btn-start-track">
+                <i class="fa-solid fa-play me-1"></i> 調査開始
+              </button>
+            </div>
+            <div class="col-6">
+              <button class="btn btn-sm btn-danger w-100 py-2" id="btn-stop-track" disabled>
+                <i class="fa-solid fa-stop me-1"></i> 調査一時停止
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: 調査フォーム入力画面 -->
+    <div id="tab-form" class="app-tab-content container py-3">
+      <div class="glass-panel p-4 mb-4">
+        <h4 class="mb-3 text-info fw-bold"><i class="fa-solid fa-pen-to-square me-2"></i>現地調査入力</h4>
+        
+        <!-- 現在位置の表示 -->
+        <div class="alert alert-secondary py-2 px-3 small border-0 bg-dark mb-4 d-flex justify-content-between align-items-center">
+          <div>
+            <i class="fa-solid fa-location-dot text-info me-1"></i>
+            <span class="text-secondary">現在位置:</span>
+            <span class="ms-1 fw-bold text-light" id="form-coords">位置情報未取得</span>
+          </div>
+          <button class="btn btn-xs btn-outline-info py-0 px-2" id="btn-refresh-form-coords" type="button" style="font-size: 0.75rem;">
+            <i class="fa-solid fa-arrows-rotate"></i> 更新
+          </button>
+        </div>
+
+        <form id="survey-form">
+          <div class="mb-3">
+            <label class="form-label" for="spot-category">地点分類 <span class="text-danger">*</span></label>
+            <select class="form-select" id="spot-category" required>
+              <option value="" disabled selected>分類を選択してください</option>
+              <option value="哺乳類">哺乳類</option>
+              <option value="鳥類">鳥類</option>
+              <option value="両生・爬虫類">両生・爬虫類</option>
+              <option value="昆虫類">昆虫類</option>
+              <option value="植物・植生">植物・植生</option>
+              <option value="人工構造物">人工構造物</option>
+              <option value="自然地形">自然地形</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="species-name">種名 / 対象物名 <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="species-name" placeholder="例: タヌキ、崩壊地など" required autocomplete="off">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="info-detail">情報詳細</label>
+            <textarea class="form-control" id="info-detail" rows="2" placeholder="行動、状態、周辺環境などの詳細情報を記入" autocomplete="off"></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="interview-target">聞き取り対象</label>
+            <input type="text" class="form-control" id="interview-target" placeholder="例: 地元住民Aさん、聞き取りなし" autocomplete="off">
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label d-block">現地写真撮影 <span class="text-secondary">(200KB自動圧縮)</span></label>
+            <input type="file" id="camera-input" accept="image/*" capture="environment" class="d-none">
+            <div class="photo-capture-wrapper" id="photo-trigger">
+              <i class="fa-solid fa-camera fa-2x text-muted mb-2 d-block" id="camera-icon"></i>
+              <span class="text-secondary small" id="photo-status">カメラを起動して撮影</span>
+              <img id="photo-preview-img" class="photo-preview" src="#" alt="プレビュー">
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-gradient-primary w-100 py-3 mt-2">
+            <i class="fa-solid fa-plus me-1"></i> フォーム追加 (保存)
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- TAB 3: データ管理・送信画面 -->
+    <div id="tab-data" class="app-tab-content container py-3">
+      <div class="glass-panel p-4 mb-4">
+        <h4 class="mb-3 text-info fw-bold"><i class="fa-solid fa-database me-2"></i>調査データ管理</h4>
+        
+        <div class="row g-3 mb-4">
+          <div class="col-6">
+            <div class="p-3 bg-dark rounded border border-secondary text-center">
+              <div class="fs-3 fw-bold text-info" id="survey-count-display">0</div>
+              <div class="text-secondary small">調査データ件数</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-3 bg-dark rounded border border-secondary text-center">
+              <div class="fs-3 fw-bold text-success" id="track-count-display">0</div>
+              <div class="text-secondary small">トラック軌跡点数</div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-secondary my-4">
+
+        <h5 class="text-light mb-3">アクション</h5>
+        
+        <div class="d-grid gap-3">
+          <!-- GASへの送信 -->
+          <button class="btn btn-gradient-success py-3 d-flex justify-content-between align-items-center" id="btn-submit-gas">
+            <span><i class="fa-solid fa-cloud-arrow-up me-2"></i>Googleクラウドへ送信</span>
+            <span class="badge bg-light text-dark" id="btn-submit-badge">0 件</span>
+          </button>
+
+          <!-- SHPファイルダウンロード -->
+          <button class="btn btn-outline-info py-3 d-flex justify-content-between align-items-center" id="btn-download-shp">
+            <span><i class="fa-solid fa-file-zipper me-2"></i>SHPファイル (ZIP) 出力</span>
+            <span class="small text-secondary">ブラウザ内変換</span>
+          </button>
+        </div>
+
+        <hr class="border-secondary my-4">
+
+        <div class="card bg-dark border-secondary p-3">
+          <h6 class="text-light mb-2"><i class="fa-solid fa-user-gear me-2"></i>システム設定・情報</h6>
+          <div class="small text-secondary mb-2">
+            <strong>ログインユーザー:</strong> <span class="text-info ms-1" id="config-username">---</span>
+          </div>
+          <div class="small text-secondary mb-3">
+            <strong>IndexedDB 状態:</strong> <span class="text-success ms-1"><i class="fa-solid fa-circle-check"></i> 接続済み</span>
+          </div>
+          <button class="btn btn-sm btn-outline-danger w-100" id="btn-change-user">
+            ユーザー名の変更・ログアウト
+          </button>
+        </div>
+
+        <div class="mt-4 text-center">
+          <button class="btn btn-xs btn-outline-warning py-1 px-3 fs-7" id="btn-clear-db" style="font-size: 0.75rem;">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i> 端末内データを強制リセット
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ボトムタブナビゲーション -->
+  <nav class="bottom-nav">
+    <button class="nav-item-btn active" data-tab="tab-map">
+      <i class="fa-solid fa-map"></i>
+      <span>調査マップ</span>
+    </button>
+    <button class="nav-item-btn" data-tab="tab-form">
+      <i class="fa-solid fa-circle-plus"></i>
+      <span>新規調査</span>
+    </button>
+    <button class="nav-item-btn position-relative" data-tab="tab-data">
+      <i class="fa-solid fa-square-poll-horizontal"></i>
+      <span>データ管理</span>
+      <span class="badge-count" id="badge-survey-count">0</span>
+    </button>
+  </nav>
+
+  <!-- JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/dexie@4.0.1/dist/dexie.js"></script>
+  
+  <!-- Mapbox shp-write CDN -->
+  <script src="https://unpkg.com/@mapbox/shp-write@latest/shpwrite.js"></script>
+
+  <!-- カスタムアプリケーションロジック -->
+  <script src="app.js"></script>
+</body>
+</html>
