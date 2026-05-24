@@ -76,15 +76,19 @@
       position: relative;
       overflow-y: auto;
       overflow-x: hidden;
-      padding-bottom: 110px; /* ボトムナビゲーション用の余白を十分に拡張 */
+      padding-bottom: 140px; /* ボトムナビゲーション（65px）からボタンを完全に浮かび上がらせるために余白を大幅拡張 */
     }
 
     /* タブ切り替え制御 */
     .app-tab-content {
       display: none;
-      height: 100%;
       width: 100%;
-      padding-bottom: 40px; /* スクロール時に底部の要素がフッターに被らないよう余白を確保 */
+      /* height: 100% を削除：コンテンツが縦に長い場合も親要素が正しくスクロールを検知できるようにします */
+    }
+
+    /* 地図タブだけは画面いっぱいに広げる必要があるため個別に100%を適用 */
+    #tab-map.app-tab-content {
+      height: 100%;
     }
 
     .app-tab-content.active {
