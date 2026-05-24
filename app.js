@@ -726,7 +726,11 @@ async function submitAllDataToGAS() {
       compression: "STORE",
       outputType: "blob",
       filename: baseFileName,
-      file: baseFileName
+      file: baseFileName,
+      types: {
+        line: baseFileName,
+        point: baseFileName
+      }
     });
 
     // Blob を Base64 文字列にエンコード
@@ -861,7 +865,11 @@ async function downloadShpFile() {
       compression: "STORE",
       outputType: "blob",
       filename: baseFileName,
-      file: baseFileName
+      file: baseFileName,
+      types: {
+        line: baseFileName,
+        point: baseFileName
+      }
     });
 
     // 3. ブラウザから即ダウンロード
