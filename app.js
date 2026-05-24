@@ -172,10 +172,11 @@ function initMap() {
   // L.control.zoomを右上等に配置
   L.control.zoom({ position: 'topleft' }).addTo(map);
 
-  // 標準のカラーマップタイル (OpenStreetMap)
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19
+  // 国土地理院 標準地図タイル
+  L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>',
+    minZoom: 2,
+    maxZoom: 18
   }).addTo(map);
 
   // 軌跡描画用のレイヤーを作成
