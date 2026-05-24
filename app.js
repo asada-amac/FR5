@@ -117,8 +117,7 @@ function initUI() {
   // GAS一括送信ボタン
   document.getElementById("btn-submit-gas").addEventListener("click", submitAllDataToGAS);
 
-  // SHPファイルダウンロードボタン
-  document.getElementById("btn-download-shp").addEventListener("click", downloadShpFile);
+
 }
 
 // 端末内データ件数の同期
@@ -785,115 +784,4 @@ async function submitAllDataToGAS() {
   }
 }
 
-// ==========================================
-// 8. SHP FILE GENERATION (shp-write)
-// ==========================================
-async function downloadShpFile() {
-  const tracks = await db.tracks.orderBy("timestamp").toArray();
-  
-  if (tracks.length === 0) {
-    alert("出力するトラック（軌跡）データがありません。");
-    return;
-  }
 
-  const loadingOverlay = document.getElementById("loading-overlay");
-  loadingOverlay.style.display = "flex";
-  document.getElementById("loading-text").innerText = "SHPファイルをブラウザ内で生成中...";
-
-  try {
-    // 1. トラックデータをGeoJSON LineStringにコンバート
-    // 緯度・経度の配列を作成 (lng, lat の順に格納)
-    const coordinates = tracks.map(t => [t.lng, t.lat]);
-
-    // GeoJSONデータの定義
-    const geojson = {
-      type: "FeatureCollection",
-      features: []
-    };
-
-    // 軌跡が点（単数）の場合は Point で出力し、複数の場合は LineString とする
-    if (coordinates.length === 1) {
-      geojson.features.push({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: coordinates[0]
-        },
-        properties: {
-          id: tracks[0].sessionId || "single_point",
-          surveyor: tracks[0].username,
-          time: new Date(tracks[0].timestamp).toISOString()
-        }
-      });
-    } else {
-      // 軌跡全体を1本のラインとして出力
-      geojson.features.push({
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: coordinates
-        },
-        properties: {
-          id: tracks[0].sessionId || "track_line",
-          surveyor: tracks[0].username,
-          start: new Date(tracks[0].timestamp).toISOString(),
-          end: new Date(tracks[tracks.length - 1].timestamp).toISOString()
-        }
-      });
-    }
-
-    // ファイル名（ベース名）の動的組み立て: 調査日（YYYYMMDD)_調査開始時刻(HHMM)_調査者名_line
-    const startTime = new Date(tracks[0].timestamp);
-    const yyyy = startTime.getFullYear();
-    const mm = String(startTime.getMonth() + 1).padStart(2, '0');
-    const dd = String(startTime.getDate()).padStart(2, '0');
-    const hh = String(startTime.getHours()).padStart(2, '0');
-    const min = String(startTime.getMinutes()).padStart(2, '0');
-    
-    const yyyymmdd = `${yyyy}${mm}${dd}`;
-    const hhmm = `${hh}${min}`;
-    const username = tracks[0].username || "匿名調査員";
-    
-    // ファイル名として使用できないOS禁止文字を安全に置換
-    const cleanUsername = username.replace(/[\\/:*?"<>|]/g, "_");
-    const baseFileName = `${yyyymmdd}_${hhmm}_${cleanUsername}_line`;
-
-    // 2. shp-write ライブラリを使い、ZIP化されたSHPデータを生成
-    // 最新の shp-write では、内部で JSZip v3 が使用されているため、.zip() は Promise を返します。
-    // filename / file オプションに baseFileName を指定することで、ZIP内の各ファイル（.shp, .shx, .dbf, .prj）の名称が置き換わります。
-    const zipBlob = await shpwrite.zip(geojson, {
-      compression: "STORE",
-      outputType: "blob",
-      filename: baseFileName,
-      file: baseFileName,
-      types: {
-        line: baseFileName,
-        point: baseFileName
-      }
-    });
-
-    // 3. ブラウザから即ダウンロード
-    const downloadUrl = URL.createObjectURL(zipBlob);
-    
-    // ダウンロード要素の作成とトリガー
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = `${baseFileName}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    
-    // 後処理
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(downloadUrl);
-    }, 100);
-
-    loadingOverlay.style.display = "none";
-    alert("SHPファイル一式 (ZIP) のブラウザ生成とダウンロードが完了しました！");
-
-  } catch (err) {
-    console.error("SHP出力エラー:", err);
-    loadingOverlay.style.display = "none";
-    alert(`SHPファイルの生成中にエラーが発生しました。\n詳細: ${err.message}`);
-  }
-}

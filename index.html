@@ -15,17 +15,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
   
-  <style>
     :root {
-      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-      --glass-bg: rgba(30, 41, 59, 0.7);
-      --glass-border: rgba(255, 255, 255, 0.08);
-      --accent-color: #06b6d4; /* シアン/ネオンブルー */
-      --accent-success: #10b981; /* エメラルド/グリーン */
-      --accent-warning: #f59e0b; /* アンバー */
-      --accent-danger: #ef4444; /* レッド */
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
+      --bg-gradient: linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 100%); /* 屋外で見えやすい明るいスレートグレー */
+      --glass-bg: rgba(255, 255, 255, 0.92); /* 高不透明度のホワイトグラス */
+      --glass-border: rgba(15, 23, 42, 0.16); /* はっきりとしたスレート境界線 */
+      --accent-color: #1e40af; /* 濃いブルー（最高コントラストのプライマリ） */
+      --accent-success: #065f46; /* 視認性の高い濃いエメラルド（成功） */
+      --accent-warning: #92400e; /* 視認性の高い濃いアンバー（警告） */
+      --accent-danger: #991b1b; /* 視認性の高い濃いレッド（危険） */
+      --text-main: #0f172a; /* ほぼ黒（最高コントラスト） */
+      --text-muted: #334155; /* 濃いスレートグレー（サブテキスト） */
     }
 
     body {
@@ -39,32 +38,33 @@
       color: var(--text-main);
       display: flex;
       flex-direction: column;
+      font-size: 1.08rem; /* 屋外用の基本フォントサイズを底上げ */
     }
 
-    /* ガラスモルフィズムスタイル */
+    /* ガラスモルフィズムスタイル（ライトテーマに最適化） */
     .glass-panel {
       background: var(--glass-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 2px solid var(--glass-border); /* 視認性を上げるため境界線を太く */
       border-radius: 16px;
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
     }
 
     /* ヘッダー */
     header {
-      padding: 12px 16px;
+      padding: 14px 18px;
       z-index: 1030;
-      border-bottom: 1px solid var(--glass-border);
-      background: rgba(15, 23, 42, 0.8);
-      backdrop-filter: blur(8px);
+      border-bottom: 2px solid var(--glass-border);
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
     }
 
     header h1 {
-      font-size: 1.15rem;
+      font-size: 1.35rem; /* サイズ拡大 */
       font-weight: 800;
       letter-spacing: 0.5px;
-      background: linear-gradient(to right, #38bdf8, #818cf8);
+      background: linear-gradient(to right, #1e40af, #4338ca);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       margin: 0;
@@ -76,14 +76,13 @@
       position: relative;
       overflow-y: auto;
       overflow-x: hidden;
-      padding-bottom: 140px; /* ボトムナビゲーション（65px）からボタンを完全に浮かび上がらせるために余白を大幅拡張 */
+      padding-bottom: 140px; /* ボトムバーからボタンを完全に浮かび上がらせるため余白を十分に確保 */
     }
 
     /* タブ切り替え制御 */
     .app-tab-content {
       display: none;
       width: 100%;
-      /* height: 100% を削除：コンテンツが縦に長い場合も親要素が正しくスクロールを検知できるようにします */
     }
 
     /* 地図タブだけは画面いっぱいに広げる必要があるため個別に100%を適用 */
@@ -118,44 +117,51 @@
     /* マップ上のフローティングコントロール */
     .map-overlay-controls {
       position: absolute;
-      top: 10px;
-      right: 10px;
+      top: 15px;
+      right: 15px;
       z-index: 1000;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
     }
 
     .map-btn {
-      width: 44px;
-      height: 44px;
+      width: 50px; /* タップしやすくするため大きく */
+      height: 50px;
       border-radius: 50%;
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
+      background: rgba(255, 255, 255, 0.95);
+      border: 2px solid var(--glass-border);
       color: var(--text-main);
       display: flex;
       justify-content: center;
       align-items: center;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.18);
       cursor: pointer;
       transition: all 0.2s ease;
       backdrop-filter: blur(8px);
+      font-size: 1.25rem;
     }
 
     .map-btn:active {
       transform: scale(0.9);
       background: var(--accent-color);
+      color: white;
     }
 
     .map-tracking-panel {
       position: absolute;
-      bottom: 20px;
-      left: 10px;
-      right: 10px;
+      bottom: 25px;
+      left: 12px;
+      right: 12px;
       z-index: 1000;
-      padding: 12px 16px;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      padding: 16px 20px;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(15, 23, 42, 0.22);
+    }
+
+    .map-tracking-panel span.small, .map-tracking-panel .text-secondary {
+      font-size: 0.85rem !important; /* フォントサイズ拡大 */
+      font-weight: 600;
     }
 
     /* ボトムナビゲーションバー */
@@ -164,15 +170,16 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 65px;
-      background: rgba(15, 23, 42, 0.9);
+      height: 70px; /* やや高さを拡大 */
+      background: rgba(255, 255, 255, 0.98); /* 白ベース */
       backdrop-filter: blur(20px);
-      border-top: 1px solid var(--glass-border);
+      border-top: 2px solid var(--glass-border);
       display: flex;
       justify-content: space-around;
       align-items: center;
       z-index: 1030;
       padding-bottom: env(safe-area-inset-bottom);
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
     }
 
     .nav-item-btn {
@@ -184,25 +191,26 @@
       background: none;
       border: none;
       color: var(--text-muted);
-      font-size: 0.75rem;
-      font-weight: 500;
-      padding: 6px 0;
+      font-size: 0.85rem; /* サイズ拡大 */
+      font-weight: 600; /* 太字 */
+      padding: 8px 0;
       transition: all 0.2s;
     }
 
     .nav-item-btn i {
-      font-size: 1.3rem;
-      margin-bottom: 4px;
+      font-size: 1.5rem; /* アイコンサイズ拡大 */
+      margin-bottom: 5px;
       transition: all 0.2s;
     }
 
     .nav-item-btn.active {
       color: var(--accent-color);
+      font-weight: 800;
     }
 
     .nav-item-btn.active i {
       transform: translateY(-2px);
-      text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+      filter: drop-shadow(0 2px 4px rgba(30, 64, 175, 0.3));
     }
 
     /* ログインモーダル */
@@ -212,7 +220,8 @@
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(15, 23, 42, 0.95);
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
       z-index: 2000;
       display: flex;
       justify-content: center;
@@ -221,87 +230,107 @@
     }
 
     .login-card {
-      max-width: 400px;
+      max-width: 440px;
       width: 100%;
-      padding: 30px;
+      padding: 35px;
       text-align: center;
+      background: #ffffff;
+      border: 3px solid var(--glass-border);
     }
 
     .login-card h2 {
+      font-size: 1.8rem;
       font-weight: 800;
       margin-bottom: 20px;
-      background: linear-gradient(to right, #38bdf8, #818cf8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      color: var(--accent-color);
     }
 
-    /* カスタムフォームコントロール */
+    /* カスタムフォームコントロール（高視認性） */
     .form-control, .form-select {
-      background-color: rgba(15, 23, 42, 0.6);
-      border: 1px solid var(--glass-border);
+      background-color: #ffffff;
+      border: 2px solid #94a3b8; /* 濃い境界線 */
       color: var(--text-main);
-      border-radius: 8px;
+      border-radius: 10px;
+      padding: 12px 16px; /* パディングを拡大 */
+      font-size: 1.05rem; /* フォントサイズ拡大 */
+      font-weight: 500;
     }
 
     .form-control:focus, .form-select:focus {
-      background-color: rgba(15, 23, 42, 0.8);
+      background-color: #ffffff;
       border-color: var(--accent-color);
-      box-shadow: 0 0 0 0.25rem rgba(6, 182, 212, 0.25);
+      box-shadow: 0 0 0 0.25rem rgba(30, 64, 175, 0.25);
       color: var(--text-main);
     }
 
     .form-label {
-      color: var(--text-muted);
-      font-weight: 500;
-      font-size: 0.9rem;
+      color: var(--text-main); /* 濃くする */
+      font-weight: 700; /* ボールドに */
+      font-size: 1.05rem; /* サイズ拡大 */
+      margin-bottom: 8px;
     }
 
     /* 写真撮影エリア */
     .photo-capture-wrapper {
-      border: 2px dashed var(--glass-border);
-      border-radius: 12px;
-      padding: 20px;
+      border: 3px dashed #94a3b8; /* 太く */
+      border-radius: 14px;
+      padding: 28px 20px;
       text-align: center;
       cursor: pointer;
       position: relative;
       overflow: hidden;
-      background: rgba(15, 23, 42, 0.3);
+      background: #f8fafc;
       transition: all 0.3s;
     }
 
     .photo-capture-wrapper:hover {
       border-color: var(--accent-color);
-      background: rgba(6, 182, 212, 0.05);
+      background: rgba(30, 64, 175, 0.05);
     }
 
     .photo-preview {
       width: 100%;
-      max-height: 180px;
+      max-height: 220px;
       object-fit: cover;
-      border-radius: 8px;
+      border-radius: 10px;
       display: none;
       margin-top: 10px;
     }
 
-    /* ボタンカスタマイズ */
+    /* ボタンカスタマイズ（大きく、見やすく） */
     .btn-gradient-primary {
-      background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
       color: white;
       border: none;
-      font-weight: 600;
+      font-weight: 700;
+      padding: 14px 20px; /* パディング拡大 */
+      font-size: 1.15rem; /* フォント拡大 */
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(30, 64, 175, 0.25);
       transition: all 0.3s;
     }
 
     .btn-gradient-primary:hover {
-      background: linear-gradient(135deg, #0891b2 0%, #2563eb 100%);
-      transform: translateY(-1px);
+      background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(30, 64, 175, 0.35);
+      color: white;
     }
 
     .btn-gradient-success {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
       color: white;
       border: none;
-      font-weight: 600;
+      font-weight: 700;
+      padding: 16px 24px;
+      font-size: 1.2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+    }
+    
+    .btn-gradient-success:hover {
+      background: linear-gradient(135deg, #047857 0%, #059669 100%);
+      color: white;
     }
 
     /* カウンターバッジ */
@@ -309,16 +338,17 @@
       position: absolute;
       top: 5px;
       right: 25%;
-      background: var(--accent-warning);
-      color: #0f172a;
-      font-weight: 700;
-      font-size: 0.65rem;
+      background: #dc2626; /* はっきりとした赤に変更 */
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 0.75rem;
       border-radius: 50%;
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
       display: flex;
       justify-content: center;
       align-items: center;
+      border: 1px solid white;
     }
 
     /* 送信ローディング画面 */
@@ -328,19 +358,19 @@
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(15, 23, 42, 0.85);
+      background: rgba(15, 23, 42, 0.7);
       z-index: 3000;
       display: none;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      backdrop-filter: blur(5px);
+      backdrop-filter: blur(8px);
     }
 
     .spinner-neon {
-      width: 3rem;
-      height: 3rem;
-      border: 0.25em solid rgba(6, 182, 212, 0.2);
+      width: 4rem;
+      height: 4rem;
+      border: 0.3em solid rgba(30, 64, 175, 0.2);
       border-left-color: var(--accent-color);
       border-radius: 50%;
       animation: spinner-border .75s linear infinite;
@@ -349,16 +379,16 @@
     /* ステータスドット */
     .status-dot {
       display: inline-block;
-      width: 8px;
-      height: 8px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
-      margin-right: 6px;
+      margin-right: 8px;
       background-color: var(--text-muted);
     }
     
     .status-dot.active {
-      background-color: var(--accent-success);
-      box-shadow: 0 0 8px var(--accent-success);
+      background-color: #059669;
+      box-shadow: 0 0 10px #059669;
       animation: pulse 1.5s infinite;
     }
 
@@ -368,20 +398,27 @@
       100% { opacity: 0.5; }
     }
 
-    /* Leaflet カスタマイズ */
+    /* Leaflet コントロールカスタマイズ（大きく） */
     .leaflet-bar {
-      border: 1px solid var(--glass-border) !important;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+      border: 2px solid var(--glass-border) !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+      border-radius: 8px;
     }
     .leaflet-bar a {
-      background-color: var(--glass-bg) !important;
+      background-color: #ffffff !important;
       color: var(--text-main) !important;
-      border-bottom: 1px solid var(--glass-border) !important;
-      backdrop-filter: blur(8px);
+      border-bottom: 2px solid var(--glass-border) !important;
+      width: 44px !important;
+      height: 44px !important;
+      line-height: 44px !important;
+      font-size: 1.3rem !important;
     }
     .leaflet-bar a:hover {
-      background-color: var(--accent-color) !important;
-      color: #0f172a !important;
+      background-color: #e2e8f0 !important;
+      color: var(--accent-color) !important;
+    }
+    .leaflet-control-zoom-in, .leaflet-control-zoom-out {
+      border-radius: 6px !important;
     }
   </style>
 </head>
@@ -478,15 +515,15 @@
       <div class="glass-panel p-4 mb-4">
         <h4 class="mb-3 text-info fw-bold"><i class="fa-solid fa-pen-to-square me-2"></i>現地調査入力</h4>
         
-        <!-- 現在位置の表示 -->
-        <div class="alert alert-secondary py-2 px-3 small border-0 bg-dark mb-4 d-flex justify-content-between align-items-center">
-          <div>
-            <i class="fa-solid fa-location-dot text-info me-1"></i>
-            <span class="text-secondary">現在位置:</span>
-            <span class="ms-1 fw-bold text-light" id="form-coords">位置情報未取得</span>
+        <!-- 現在位置の表示 (高コントラスト化) -->
+        <div class="alert alert-primary py-3 px-3 border border-primary-subtle bg-white mb-4 d-flex justify-content-between align-items-center" style="border-width: 2px !important;">
+          <div style="font-size: 1.05rem;">
+            <i class="fa-solid fa-location-dot text-primary me-2"></i>
+            <span class="fw-bold text-dark">現在位置:</span>
+            <span class="ms-2 fw-bold text-primary" id="form-coords">位置情報未取得</span>
           </div>
-          <button class="btn btn-xs btn-outline-info py-0 px-2" id="btn-refresh-form-coords" type="button" style="font-size: 0.75rem;">
-            <i class="fa-solid fa-arrows-rotate"></i> 更新
+          <button class="btn btn-sm btn-outline-primary fw-bold py-1 px-3" id="btn-refresh-form-coords" type="button" style="font-size: 0.9rem;">
+            <i class="fa-solid fa-arrows-rotate me-1"></i> 位置更新
           </button>
         </div>
 
@@ -538,61 +575,55 @@
       </div>
     </div>
 
-    <!-- TAB 3: データ管理・送信画面 -->
+    <!-- TAB 3: データ管理・送信画面 (ライト高コントラスト化) -->
     <div id="tab-data" class="app-tab-content container py-3">
       <div class="glass-panel p-4 mb-4">
-        <h4 class="mb-3 text-info fw-bold"><i class="fa-solid fa-database me-2"></i>調査データ管理</h4>
+        <h4 class="mb-3 text-primary fw-bold fs-4"><i class="fa-solid fa-database me-2"></i>調査データ管理</h4>
         
         <div class="row g-3 mb-4">
           <div class="col-6">
-            <div class="p-3 bg-dark rounded border border-secondary text-center">
-              <div class="fs-3 fw-bold text-info" id="survey-count-display">0</div>
-              <div class="text-secondary small">調査データ件数</div>
+            <div class="p-3 bg-white rounded border border-primary text-center" style="border-width: 2px !important;">
+              <div class="fs-2 fw-bold text-primary" id="survey-count-display">0</div>
+              <div class="text-dark fw-bold small">調査データ件数</div>
             </div>
           </div>
           <div class="col-6">
-            <div class="p-3 bg-dark rounded border border-secondary text-center">
-              <div class="fs-3 fw-bold text-success" id="track-count-display">0</div>
-              <div class="text-secondary small">トラック軌跡点数</div>
+            <div class="p-3 bg-white rounded border border-success text-center" style="border-width: 2px !important;">
+              <div class="fs-2 fw-bold text-success" id="track-count-display">0</div>
+              <div class="text-dark fw-bold small">トラック軌跡点数</div>
             </div>
           </div>
         </div>
 
         <hr class="border-secondary my-4">
 
-        <h5 class="text-light mb-3">アクション</h5>
+        <h5 class="text-dark fw-bold mb-3 fs-5">アクション</h5>
         
         <div class="d-grid gap-3">
           <!-- GASへの送信 -->
           <button class="btn btn-gradient-success py-3 d-flex justify-content-between align-items-center" id="btn-submit-gas">
-            <span><i class="fa-solid fa-cloud-arrow-up me-2"></i>Googleクラウドへ送信</span>
-            <span class="badge bg-light text-dark" id="btn-submit-badge">0 件</span>
-          </button>
-
-          <!-- SHPファイルダウンロード -->
-          <button class="btn btn-outline-info py-3 d-flex justify-content-between align-items-center" id="btn-download-shp">
-            <span><i class="fa-solid fa-file-zipper me-2"></i>SHPファイル (ZIP) 出力</span>
-            <span class="small text-secondary">ブラウザ内変換</span>
+            <span class="fs-5"><i class="fa-solid fa-cloud-arrow-up me-2"></i>Googleクラウドへ送信</span>
+            <span class="badge bg-white text-success border border-success fw-bold fs-6" id="btn-submit-badge">0 件</span>
           </button>
         </div>
 
         <hr class="border-secondary my-4">
 
-        <div class="card bg-dark border-secondary p-3">
-          <h6 class="text-light mb-2"><i class="fa-solid fa-user-gear me-2"></i>システム設定・情報</h6>
-          <div class="small text-secondary mb-2">
-            <strong>ログインユーザー:</strong> <span class="text-info ms-1" id="config-username">---</span>
+        <div class="card bg-white border border-secondary p-3" style="border-width: 2px !important;">
+          <h6 class="text-dark fw-bold mb-3 fs-6"><i class="fa-solid fa-user-gear me-2"></i>システム設定・情報</h6>
+          <div class="small text-dark mb-2">
+            <strong>ログインユーザー:</strong> <span class="text-primary fw-bold ms-1" id="config-username">---</span>
           </div>
-          <div class="small text-secondary mb-3">
-            <strong>IndexedDB 状態:</strong> <span class="text-success ms-1"><i class="fa-solid fa-circle-check"></i> 接続済み</span>
+          <div class="small text-dark mb-3">
+            <strong>IndexedDB 状態:</strong> <span class="text-success fw-bold ms-1"><i class="fa-solid fa-circle-check"></i> 接続済み</span>
           </div>
-          <button class="btn btn-sm btn-outline-danger w-100" id="btn-change-user">
+          <button class="btn btn-sm btn-outline-danger fw-bold w-100 py-2" id="btn-change-user">
             ユーザー名の変更・ログアウト
           </button>
         </div>
 
         <div class="mt-4 text-center">
-          <button class="btn btn-xs btn-outline-warning py-1 px-3 fs-7" id="btn-clear-db" style="font-size: 0.75rem;">
+          <button class="btn btn-sm btn-outline-warning fw-bold py-2 px-3" id="btn-clear-db">
             <i class="fa-solid fa-triangle-exclamation me-1"></i> 端末内データを強制リセット
           </button>
         </div>
