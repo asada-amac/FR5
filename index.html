@@ -76,7 +76,7 @@
       position: relative;
       overflow-y: auto;
       overflow-x: hidden;
-      padding-bottom: 75px; /* ボトムナビゲーション用の余白 */
+      padding-bottom: 110px; /* ボトムナビゲーション用の余白を十分に拡張 */
     }
 
     /* タブ切り替え制御 */
@@ -84,6 +84,7 @@
       display: none;
       height: 100%;
       width: 100%;
+      padding-bottom: 40px; /* スクロール時に底部の要素がフッターに被らないよう余白を確保 */
     }
 
     .app-tab-content.active {
