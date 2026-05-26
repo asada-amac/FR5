@@ -86,7 +86,9 @@ function initUI() {
     e.preventDefault();
     const nameInput = document.getElementById("username-input").value.trim();
     if (nameInput) {
-      sessionStorage.setItem("surveyor_name", nameInput);
+      const todayStr = new Date().toISOString().split("T")[0];
+      localStorage.setItem("surveyor_name", nameInput);
+      localStorage.setItem("surveyor_login_date", todayStr);
       document.getElementById("login-overlay").style.display = "none";
       initApp(nameInput);
     }
@@ -95,7 +97,7 @@ function initUI() {
   // ログアウトボタン (自身のリアルタイム位置を確実に消去してからログアウトするよう拡張)
   document.getElementById("btn-change-user").addEventListener("click", async () => {
     if (confirm("ログアウトしますか？（保存済みの調査データは削除されません）")) {
-      const username = sessionStorage.getItem("surveyor_name");
+      const username = localStorage.getItem("surveyor_name");
       if (username) {
         try {
           await dbFirestore.collection("active_users").doc(username).delete();
@@ -104,7 +106,10 @@ function initUI() {
           console.error("ログアウト時のFirestore削除失敗:", e);
         }
       }
-      sessionStorage.removeItem("surveyor_name");
+      localStorage.removeItem("surveyor_name");
+      localStorage.removeItem("surveyor_login_date");
+      localStorage.removeItem("is_tracking_active");
+      localStorage.removeItem("current_session_id");
       location.reload();
     }
   });
@@ -185,10 +190,31 @@ function initUI() {
     });
   }
 
+  // アプリがフォアグラウンドに戻った（スリープ解除や別アプリから戻った）時の処理
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      console.log("アプリがフォアグラウンドに戻りました。状態を確認します。");
+      const username = localStorage.getItem("surveyor_name");
+      const isTracking = localStorage.getItem("is_tracking_active") === "true";
+      
+      if (username && isTracking) {
+        if (!trackingIntervalId) {
+          // 何らかの理由（OSによるプロセス休止等）でタイマーが停止していた場合は復旧
+          resumeTracking();
+        } else {
+          // スリープ中のデータ飛び対策として即時記録 & Firestore同期を実行
+          recordCurrentTrackPoint();
+        }
+      }
+    }
+  });
+
   // ページを閉じる・遷移する際、非同期で自身のリアルタイム位置を削除する後始末
   window.addEventListener("beforeunload", () => {
-    const username = sessionStorage.getItem("surveyor_name");
-    if (username) {
+    const isTracking = localStorage.getItem("is_tracking_active") === "true";
+    const username = localStorage.getItem("surveyor_name");
+    // トラッキング稼働中でない場合のみ、アクティブリストから削除
+    if (username && !isTracking) {
       dbFirestore.collection("active_users").doc(username).delete();
     }
   });
@@ -208,13 +234,21 @@ async function initDBStats() {
   document.getElementById("btn-submit-badge").innerText = `${surveyCount} 件`;
 }
 
-// ログイン確認
+// ログイン確認 (本日分のログイン維持に対応)
 function checkLogin() {
-  const username = sessionStorage.getItem("surveyor_name");
-  if (username) {
+  const username = localStorage.getItem("surveyor_name");
+  const loginDate = localStorage.getItem("surveyor_login_date");
+  const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+  if (username && loginDate === todayStr) {
     document.getElementById("login-overlay").style.display = "none";
     return username;
   } else {
+    // 期限切れ、または未ログインならクリア
+    localStorage.removeItem("surveyor_name");
+    localStorage.removeItem("surveyor_login_date");
+    localStorage.removeItem("is_tracking_active");
+    localStorage.removeItem("current_session_id");
     document.getElementById("login-overlay").style.display = "flex";
     return null;
   }
@@ -240,6 +274,12 @@ function initApp(username) {
       // すでにトラッキングタイマーが動作中（リロード時など）なら直ちに初回位置更新を行う
       if (trackingIntervalId && latestCoords.lat && latestCoords.lng) {
         updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
+      }
+
+      // 以前トラッキング中だった場合は自動復旧
+      const wasTracking = localStorage.getItem("is_tracking_active") === "true";
+      if (wasTracking) {
+        resumeTracking();
       }
     })
     .catch((error) => {
@@ -417,7 +457,8 @@ function startTracking() {
 
   // 追跡用セッションIDの新規生成 (UUIDv4)
   currentSessionId = crypto.randomUUID();
-  sessionStorage.setItem("current_session_id", currentSessionId);
+  localStorage.setItem("current_session_id", currentSessionId);
+  localStorage.setItem("is_tracking_active", "true");
 
   // UI状態の更新
   document.getElementById("btn-start-track").disabled = true;
@@ -429,10 +470,10 @@ function startTracking() {
   recordCurrentTrackPoint();
 
   // Firebase リアルタイム位置情報の即時更新 & 10分ごとの定期更新タイマー開始
-  const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+  const username = localStorage.getItem("surveyor_name") || "匿名調査員";
   updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
   realtimeLocationIntervalId = setInterval(() => {
-    const currentUsername = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+    const currentUsername = localStorage.getItem("surveyor_name") || "匿名調査員";
     if (latestCoords.lat && latestCoords.lng) {
       updateRealtimeLocation(currentUsername, latestCoords.lat, latestCoords.lng);
     }
@@ -465,7 +506,7 @@ async function checkAndRecordAsync(position) {
   if (now - lastRecordedTime >= 50000) {
     const lat = position.coords.latitude;
     const lng = position.coords.longitude;
-    const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+    const username = localStorage.getItem("surveyor_name") || "匿名調査員";
 
     await db.tracks.add({
       sessionId: currentSessionId,
@@ -488,7 +529,7 @@ async function recordCurrentTrackPoint() {
   // GPSの最新値がある場合のみ記録
   if (latestCoords.lat && latestCoords.lng) {
     const now = Date.now();
-    const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+    const username = localStorage.getItem("surveyor_name") || "匿名調査員";
 
     await db.tracks.add({
       sessionId: currentSessionId,
@@ -531,6 +572,8 @@ async function stopTracking() {
     clearInterval(realtimeLocationIntervalId);
     realtimeLocationIntervalId = null;
   }
+
+  localStorage.setItem("is_tracking_active", "false");
 
   // 調査一時停止時に自身のリアルタイム位置情報をFirestoreから確実に削除
   await removeRealtimeLocation();
@@ -650,7 +693,7 @@ async function handleSurveySubmit(e) {
   }
 
   // フォームデータ収集
-  const surveyorName = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+  const surveyorName = localStorage.getItem("surveyor_name") || "匿名調査員";
   const category = document.getElementById("spot-category").value;
   const speciesName = document.getElementById("species-name").value.trim();
   const infoDetail = document.getElementById("info-detail").value.trim();
@@ -950,7 +993,7 @@ async function updateRealtimeLocation(username, lat, lng) {
 
 // 自身の位置情報をFirestoreから削除する
 async function removeRealtimeLocation() {
-  const username = sessionStorage.getItem("surveyor_name");
+  const username = localStorage.getItem("surveyor_name");
   if (!username) return;
   try {
     await dbFirestore.collection("active_users").doc(username).delete();
@@ -962,7 +1005,7 @@ async function removeRealtimeLocation() {
 
 // 他の調査員の現在位置をFirestoreからリッスンする
 function listenToOtherUsers() {
-  const currentUsername = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+  const currentUsername = localStorage.getItem("surveyor_name") || "匿名調査員";
   const realtimeDot = document.getElementById("realtime-status-dot");
   const lastSyncText = document.getElementById("realtime-last-sync");
 
@@ -1127,6 +1170,52 @@ function listenToOtherUsers() {
       lastSyncText.innerText = "エラー: 同期切断";
     }
   });
+}
+
+// トラッキングセッションの復旧
+function resumeTracking() {
+  if (trackingIntervalId) return;
+
+  // 既存のセッションIDを取得
+  currentSessionId = localStorage.getItem("current_session_id");
+  if (!currentSessionId) {
+    currentSessionId = crypto.randomUUID();
+    localStorage.setItem("current_session_id", currentSessionId);
+  }
+
+  // UI状態の更新
+  document.getElementById("btn-start-track").disabled = true;
+  document.getElementById("btn-stop-track").disabled = false;
+  document.getElementById("track-stat").innerText = "調査中 (自動復旧・1分間隔記録)";
+  document.getElementById("track-stat").className = "text-success fw-bold";
+
+  // 定期記録の開始
+  trackingIntervalId = setInterval(() => {
+    recordCurrentTrackPoint();
+  }, 60000);
+
+  // バックグラウンド補強の watchPosition 開始
+  watchPositionId = navigator.geolocation.watchPosition(
+    (pos) => {
+      checkAndRecordAsync(pos);
+    },
+    null,
+    { enableHighAccuracy: true }
+  );
+
+  // Firestoreへのリアルタイム位置情報の同期開始
+  const username = localStorage.getItem("surveyor_name") || "匿名調査員";
+  if (latestCoords.lat && latestCoords.lng) {
+    updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
+  }
+  realtimeLocationIntervalId = setInterval(() => {
+    const currentUsername = localStorage.getItem("surveyor_name") || "匿名調査員";
+    if (latestCoords.lat && latestCoords.lng) {
+      updateRealtimeLocation(currentUsername, latestCoords.lat, latestCoords.lng);
+    }
+  }, 10 * 60 * 1000);
+
+  console.log("トラッキングセッションを自動復旧しました:", currentSessionId);
 }
 
 
