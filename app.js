@@ -29,11 +29,13 @@ let map = null;
 let currentPositionMarker = null;
 let currentPositionAccuracyCircle = null;
 let trackPolyline = null;
+let surveyMarkersGroup = null; // 調査データピン用のレイヤーグループ
 let latestCoords = { lat: null, lng: null, accuracy: null };
 
 let trackingIntervalId = null;
 let watchPositionId = null;
 let currentSessionId = null;
+let editCompressedPhotoBase64 = ""; // 編集中の写真Base64キャッシュ
 
 // Firebaseリアルタイム共有・GPSステータス用のグローバル変数
 let realtimeLocationIntervalId = null; // 10分ごとのFirestore更新タイマーID
@@ -145,10 +147,13 @@ function initUI() {
   photoTrigger.addEventListener("click", () => cameraInput.click());
   cameraInput.addEventListener("change", handlePhotoUpload);
 
-  // 新規調査フォームの更新ボタン
-  document.getElementById("btn-refresh-form-coords").addEventListener("click", () => {
-    updateFormCoordinates();
-  });
+  // 新規調査フォームの更新ボタン (安全にチェック)
+  const refreshFormCoordsBtn = document.getElementById("btn-refresh-form-coords");
+  if (refreshFormCoordsBtn) {
+    refreshFormCoordsBtn.addEventListener("click", () => {
+      updateFormCoordinates();
+    });
+  }
 
   // 調査フォーム送信
   document.getElementById("survey-form").addEventListener("submit", handleSurveySubmit);
@@ -199,6 +204,80 @@ function initUI() {
       button.classList.add("selected");
       // 隠しフィールドの値を更新
       document.getElementById("species-name").value = button.getAttribute("data-value");
+    });
+  }
+
+  // --- 追加された調査データ管理・編集用のイベントリスナー ---
+
+  // 「調査データ件数」のクリックリスナー (一覧表示)
+  const showSurveysBtn = document.getElementById("btn-show-surveys");
+  if (showSurveysBtn) {
+    showSurveysBtn.addEventListener("click", () => {
+      showSurveyListModal();
+    });
+  }
+
+  // 編集モーダル：地点分類チップの選択イベント (イベント委譲)
+  const editCategoryGroup = document.getElementById("edit-category-button-group");
+  if (editCategoryGroup) {
+    editCategoryGroup.addEventListener("click", (e) => {
+      const button = e.target.closest(".btn-chip");
+      if (!button) return;
+      editCategoryGroup.querySelectorAll(".btn-chip").forEach(btn => btn.classList.remove("selected"));
+      button.classList.add("selected");
+      document.getElementById("edit-spot-category").value = button.getAttribute("data-value");
+    });
+  }
+
+  // 編集モーダル：種名チップの選択イベント (イベント委譲)
+  const editSpeciesGroup = document.getElementById("edit-species-button-group");
+  if (editSpeciesGroup) {
+    editSpeciesGroup.addEventListener("click", (e) => {
+      const button = e.target.closest(".btn-chip");
+      if (!button) return;
+      editSpeciesGroup.querySelectorAll(".btn-chip").forEach(btn => btn.classList.remove("selected"));
+      button.classList.add("selected");
+      document.getElementById("edit-species-name").value = button.getAttribute("data-value");
+    });
+  }
+
+  // 編集モーダル：写真選択・撮影のトリガー
+  const editPhotoTrigger = document.getElementById("edit-photo-trigger");
+  const editCameraInput = document.getElementById("edit-camera-input");
+  if (editPhotoTrigger && editCameraInput) {
+    editPhotoTrigger.addEventListener("click", () => editCameraInput.click());
+    editCameraInput.addEventListener("change", handleEditPhotoUpload);
+  }
+
+  // 編集モーダル：写真を削除ボタン
+  const editDeletePhotoBtn = document.getElementById("btn-edit-delete-photo");
+  if (editDeletePhotoBtn) {
+    editDeletePhotoBtn.addEventListener("click", () => {
+      if (confirm("写真を削除してもよろしいですか？")) {
+        editCompressedPhotoBase64 = "";
+        document.getElementById("edit-camera-icon").style.display = "block";
+        document.getElementById("edit-photo-status").innerText = "カメラを起動して写真を変更";
+        document.getElementById("edit-photo-status").className = "text-secondary small";
+        document.getElementById("edit-photo-preview-img").style.display = "none";
+        document.getElementById("edit-photo-preview-img").src = "#";
+        document.getElementById("edit-photo-delete-container").style.display = "none";
+      }
+    });
+  }
+
+  // 編集モーダル：保存ボタン
+  const editSaveSurveyBtn = document.getElementById("btn-edit-save-survey");
+  if (editSaveSurveyBtn) {
+    editSaveSurveyBtn.addEventListener("click", () => {
+      saveEditedSurvey();
+    });
+  }
+
+  // 編集モーダル：削除ボタン
+  const editDeleteSurveyBtn = document.getElementById("btn-edit-delete-survey");
+  if (editDeleteSurveyBtn) {
+    editDeleteSurveyBtn.addEventListener("click", () => {
+      deleteEditedSurvey();
     });
   }
 }
@@ -289,8 +368,37 @@ function initMap() {
     lineJoin: "round"
   }).addTo(map);
 
+  // 調査ピン用のレイヤーグループを作成
+  surveyMarkersGroup = L.layerGroup().addTo(map);
+
   // 保存済みの軌跡があれば初期表示する
   loadExistingTracksOnMap();
+
+  // 保存済みの調査データがあれば初期表示する
+  loadExistingSurveysOnMap();
+}
+
+// 保存済みのすべての調査データをマップ上に復元
+async function loadExistingSurveysOnMap() {
+  if (!map || !surveyMarkersGroup) return;
+
+  // 一旦全ピンをクリア
+  surveyMarkersGroup.clearLayers();
+
+  const surveys = await db.surveys.toArray();
+  surveys.forEach(survey => {
+    const pinColor = getMarkerColorByCategory(survey.category);
+    const marker = L.circleMarker([survey.lat, survey.lng], {
+      radius: 8,
+      fillColor: pinColor,
+      color: "#ffffff",
+      weight: 1.5,
+      fillOpacity: 0.9
+    });
+
+    marker.bindPopup(`<strong>[${survey.category}] ${survey.species}</strong><br><span class="small text-secondary">${survey.time} 保存完了</span>`);
+    surveyMarkersGroup.addLayer(marker);
+  });
 }
 
 // 既存の全軌跡を読み込んでマップに描画
@@ -419,6 +527,7 @@ function recenterMap() {
 // 新規調査フォーム内の位置座標表示を更新
 function updateFormCoordinates() {
   const formCoordsSpan = document.getElementById("form-coords");
+  if (!formCoordsSpan) return; // 安全対策
   if (latestCoords.lat && latestCoords.lng) {
     formCoordsSpan.innerText = `${latestCoords.lat.toFixed(6)}, ${latestCoords.lng.toFixed(6)} (±${Math.round(latestCoords.accuracy)}m)`;
     formCoordsSpan.className = "ms-1 fw-bold text-light";
@@ -719,19 +828,8 @@ async function handleSurveySubmit(e) {
     // UI同期
     await initDBStats();
     
-    // 地図にもピンを追加 (即座の確認用)
-    if (map) {
-      const pinColor = getMarkerColorByCategory(category);
-      const surveyPin = L.circleMarker([latestCoords.lat, latestCoords.lng], {
-        radius: 8,
-        fillColor: pinColor,
-        color: "#ffffff",
-        weight: 1.5,
-        fillOpacity: 0.9
-      }).addTo(map);
-      
-      surveyPin.bindPopup(`<strong>[${category}] ${speciesName}</strong><br><span class="small text-secondary">${surveyTime} 保存完了</span>`);
-    }
+    // マップ上のピンを再描画
+    await loadExistingSurveysOnMap();
 
     alert(`調査データを端末内に保存しました。 (現在 ${await db.surveys.count()} 件保存済み)`);
 
@@ -1197,6 +1295,305 @@ function listenToOtherUsers() {
       lastSyncText.innerText = "エラー: 同期切断";
     }
   });
+}
+
+// ==========================================
+// 8. SURVEY DATA MANAGEMENT & EDIT MODAL
+// ==========================================
+
+// 保存済み調査データ一覧モーダルを表示
+async function showSurveyListModal() {
+  const surveys = await db.surveys.toArray();
+  const container = document.getElementById("survey-list-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (surveys.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-5 text-muted">
+        <i class="fa-solid fa-folder-open fa-3x mb-3 d-block"></i>
+        <span>保存されている調査データはありません。</span>
+      </div>
+    `;
+  } else {
+    // 最新が上に来るように日時の降順でソート
+    surveys.sort((a, b) => {
+      const dateTimeA = `${a.date} ${a.time}`;
+      const dateTimeB = `${b.date} ${b.time}`;
+      return dateTimeB.localeCompare(dateTimeA);
+    });
+
+    surveys.forEach(survey => {
+      const card = document.createElement("div");
+      card.className = "card bg-white border-2 border-secondary-subtle p-3 hover-shadow cursor-pointer transition-all";
+      card.style.cursor = "pointer";
+      card.style.borderRadius = "12px";
+      card.style.transition = "all 0.2s";
+
+      // ホバー効果
+      card.addEventListener("mouseenter", () => {
+        card.style.borderColor = "var(--accent-color)";
+        card.style.boxShadow = "0 4px 12px rgba(15,23,42,0.1)";
+      });
+      card.addEventListener("mouseleave", () => {
+        card.style.borderColor = "rgba(15, 23, 42, 0.16)";
+        card.style.boxShadow = "none";
+      });
+
+      // 写真サムネイル部分のHTML
+      let photoHtml = "";
+      if (survey.photo) {
+        photoHtml = `
+          <div style="flex-shrink: 0; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid #cbd5e1; margin-left: 12px;">
+            <img src="${survey.photo}" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+        `;
+      }
+
+      const pinColor = getMarkerColorByCategory(survey.category);
+      card.innerHTML = `
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-start gap-2 flex-grow-1" style="min-width: 0;">
+            <div style="flex-grow: 1; min-width: 0;">
+              <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                <span class="badge fw-bold px-2 py-1" style="background-color: ${pinColor}; color: #ffffff; font-size: 0.85rem; border-radius: 8px;">
+                  ${survey.category}
+                </span>
+                <span class="fw-bold text-dark fs-5" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  ${survey.species}
+                </span>
+              </div>
+              <div class="text-secondary small fw-bold mb-1">
+                <i class="fa-regular fa-clock me-1"></i> ${survey.date} ${survey.time.substring(0, 5)}
+              </div>
+              ${survey.detail ? `
+                <div class="text-dark small text-truncate" style="max-width: 250px; font-weight: 500;">
+                  ${survey.detail}
+                </div>
+              ` : ''}
+              ${survey.interview && survey.interview !== "聞き取りなし" ? `
+                <div class="text-primary small text-truncate" style="max-width: 250px; font-weight: 600;">
+                  <i class="fa-regular fa-comments me-1"></i> ${survey.interview}
+                </div>
+              ` : ''}
+            </div>
+            ${photoHtml}
+          </div>
+          <div class="ps-2 text-secondary">
+            <i class="fa-solid fa-chevron-right fs-4"></i>
+          </div>
+        </div>
+      `;
+
+      card.addEventListener("click", () => {
+        // 一覧モーダルを閉じる
+        const listModalEl = document.getElementById("modal-survey-list");
+        const listModal = bootstrap.Modal.getInstance(listModalEl);
+        if (listModal) listModal.hide();
+
+        // 編集モーダルを開く
+        setTimeout(() => {
+          showSurveyEditModal(survey.id);
+        }, 350); // アニメーションが衝突しないようにディレイ
+      });
+
+      container.appendChild(card);
+    });
+  }
+
+  const listModal = new bootstrap.Modal(document.getElementById("modal-survey-list"));
+  listModal.show();
+}
+
+// 調査データ編集モーダルを表示
+async function showSurveyEditModal(surveyId) {
+  const survey = await db.surveys.get(surveyId);
+  if (!survey) {
+    alert("該当するデータが見つかりませんでした。");
+    return;
+  }
+
+  // 各フォームフィールドにロード
+  document.getElementById("edit-survey-id").value = survey.id;
+  document.getElementById("edit-spot-category").value = survey.category;
+  document.getElementById("edit-species-name").value = survey.species;
+  document.getElementById("edit-info-detail").value = survey.detail || "";
+  document.getElementById("edit-interview-target").value = (survey.interview === "聞き取りなし") ? "" : survey.interview;
+  document.getElementById("edit-lat").value = survey.lat;
+  document.getElementById("edit-lng").value = survey.lng;
+
+  // 地点分類のチップ選択状態を初期化
+  const categoryGroup = document.getElementById("edit-category-button-group");
+  if (categoryGroup) {
+    categoryGroup.querySelectorAll(".btn-chip").forEach(btn => {
+      if (btn.getAttribute("data-value") === survey.category) {
+        btn.classList.add("selected");
+      } else {
+        btn.classList.remove("selected");
+      }
+    });
+  }
+
+  // 種名のチップ選択状態を初期化
+  const speciesGroup = document.getElementById("edit-species-button-group");
+  if (speciesGroup) {
+    speciesGroup.querySelectorAll(".btn-chip").forEach(btn => {
+      if (btn.getAttribute("data-value") === survey.species) {
+        btn.classList.add("selected");
+      } else {
+        btn.classList.remove("selected");
+      }
+    });
+  }
+
+  // 写真の初期化
+  const cameraIcon = document.getElementById("edit-camera-icon");
+  const photoStatus = document.getElementById("edit-photo-status");
+  const previewImg = document.getElementById("edit-photo-preview-img");
+  const deleteBtnContainer = document.getElementById("edit-photo-delete-container");
+
+  if (survey.photo) {
+    editCompressedPhotoBase64 = survey.photo;
+    cameraIcon.style.display = "none";
+    photoStatus.innerText = "写真を変更するにはタップ";
+    photoStatus.className = "text-secondary small";
+    previewImg.src = survey.photo;
+    previewImg.style.display = "block";
+    deleteBtnContainer.style.display = "block";
+  } else {
+    editCompressedPhotoBase64 = "";
+    cameraIcon.style.display = "block";
+    photoStatus.innerText = "カメラを起動して写真を変更";
+    photoStatus.className = "text-secondary small";
+    previewImg.src = "#";
+    previewImg.style.display = "none";
+    deleteBtnContainer.style.display = "none";
+  }
+
+  // 編集モーダルを表示
+  const editModal = new bootstrap.Modal(document.getElementById("modal-survey-edit"));
+  editModal.show();
+}
+
+// 編集画面での写真アップロード・圧縮
+function handleEditPhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const photoStatus = document.getElementById("edit-photo-status");
+  const cameraIcon = document.getElementById("edit-camera-icon");
+  const previewImg = document.getElementById("edit-photo-preview-img");
+  const deleteBtnContainer = document.getElementById("edit-photo-delete-container");
+
+  photoStatus.innerText = "写真を圧縮中...";
+  photoStatus.className = "text-warning small";
+
+  // 画像リサイズ＆圧縮
+  compressImage(file, 1024, 200)
+    .then(base64 => {
+      editCompressedPhotoBase64 = base64;
+      
+      // UIプレビューの更新
+      cameraIcon.style.display = "none";
+      photoStatus.innerText = "変更完了（200KB以下に圧縮済み）";
+      photoStatus.className = "text-success small fw-bold";
+      
+      previewImg.src = base64;
+      previewImg.style.display = "block";
+      deleteBtnContainer.style.display = "block";
+    })
+    .catch(err => {
+      console.error("編集画像圧縮エラー:", err);
+      photoStatus.innerText = "エラー: 圧縮に失敗しました";
+      photoStatus.className = "text-danger small";
+      alert("画像の読み込みまたは圧縮に失敗しました。");
+    });
+}
+
+// 編集データを保存（データベース更新）
+async function saveEditedSurvey() {
+  const surveyId = document.getElementById("edit-survey-id").value;
+  const category = document.getElementById("edit-spot-category").value;
+  const speciesName = document.getElementById("edit-species-name").value.trim();
+  const infoDetail = document.getElementById("edit-info-detail").value.trim();
+  const interviewTarget = document.getElementById("edit-interview-target").value.trim() || "聞き取りなし";
+  const lat = parseFloat(document.getElementById("edit-lat").value);
+  const lng = parseFloat(document.getElementById("edit-lng").value);
+
+  if (!category) {
+    alert("地点分類を選択してください。");
+    return;
+  }
+  if (!speciesName) {
+    alert("種名を選択または入力してください。");
+    return;
+  }
+  if (isNaN(lat) || isNaN(lng)) {
+    alert("有効な経緯度を入力してください。");
+    return;
+  }
+
+  const existing = await db.surveys.get(surveyId);
+  if (!existing) {
+    alert("編集対象のデータが存在しません。");
+    return;
+  }
+
+  // レコード上書き
+  const updatedSurvey = {
+    ...existing,
+    category: category,
+    species: speciesName,
+    detail: infoDetail,
+    interview: interviewTarget,
+    lat: lat,
+    lng: lng,
+    photo: editCompressedPhotoBase64
+  };
+
+  try {
+    await db.surveys.put(updatedSurvey);
+    
+    // モーダルを閉じる
+    const editModalEl = document.getElementById("modal-survey-edit");
+    const editModal = bootstrap.Modal.getInstance(editModalEl);
+    if (editModal) editModal.hide();
+
+    // UI統計およびマップピンの再同期
+    await initDBStats();
+    await loadExistingSurveysOnMap();
+
+    alert("調査データを修正・保存しました。");
+  } catch (err) {
+    console.error("IndexedDB 修正保存失敗:", err);
+    alert("データベースの更新に失敗しました。");
+  }
+}
+
+// 編集中の調査データを削除
+async function deleteEditedSurvey() {
+  const surveyId = document.getElementById("edit-survey-id").value;
+  if (!surveyId) return;
+
+  if (confirm("この調査データを完全に削除してもよろしいですか？")) {
+    try {
+      await db.surveys.delete(surveyId);
+      
+      // モーダルを閉じる
+      const editModalEl = document.getElementById("modal-survey-edit");
+      const editModal = bootstrap.Modal.getInstance(editModalEl);
+      if (editModal) editModal.hide();
+
+      // UI統計およびマップピンの再同期
+      await initDBStats();
+      await loadExistingSurveysOnMap();
+
+      alert("調査データを削除しました。");
+    } catch (err) {
+      console.error("IndexedDB 削除失敗:", err);
+      alert("データの削除に失敗しました。");
+    }
+  }
 }
 
 
