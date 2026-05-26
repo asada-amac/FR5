@@ -451,7 +451,7 @@ function startTracking() {
     const icon = document.getElementById("tracking-icon");
     if (icon) icon.className = "fa-solid fa-circle-stop";
     const textStr = document.getElementById("tracking-btn-text");
-    if (textStr) textStr.innerText = "調査中（押すと停止）";
+    if (textStr) textStr.innerText = "トラック中";
   }
 
   // 開始時の現在点を直ちに記録
@@ -568,7 +568,7 @@ async function stopTracking() {
     const icon = document.getElementById("tracking-icon");
     if (icon) icon.className = "fa-solid fa-play";
     const textStr = document.getElementById("tracking-btn-text");
-    if (textStr) textStr.innerText = "調査開始";
+    if (textStr) textStr.innerText = "トラック開始";
   }
 
   alert("トラッキングを一時停止しました。");

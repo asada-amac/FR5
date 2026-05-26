@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>AMAC FR5 - 現地調査モバイル</title>
+  <title>FR5 - 現地調査モバイル</title>
   
   <!-- CSS CDN -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -430,15 +430,19 @@
     
     /* チップ型選択ボタンのスタイル */
     .btn-chip {
-      border-radius: 20px !important;
-      padding: 8px 16px !important;
-      font-size: 0.95rem !important;
+      border-radius: 24px !important;
+      padding: 10px 20px !important;
+      font-size: 1.1rem !important;
       font-weight: 700 !important;
       transition: all 0.2s ease !important;
       border: 2px solid #94a3b8 !important; /* はっきり見えやすい太枠 */
       background-color: #ffffff !important;
       color: var(--text-main) !important;
       cursor: pointer;
+    }
+    #info-detail, #interview-target {
+      font-size: 1.15rem !important;
+      font-weight: 500 !important;
     }
     .btn-chip:hover {
       border-color: var(--accent-color) !important;
@@ -460,7 +464,7 @@
       <div class="mb-4">
         <i class="fa-solid fa-map-location-dot fa-3x text-info"></i>
       </div>
-      <h2>AMAC FR5</h2>
+      <h2>FR5</h2>
       <p class="text-secondary small mb-4">調査を開始する前に、あなたの調査者名を入力してください。</p>
       <form id="login-form">
         <div class="mb-3">
@@ -484,16 +488,16 @@
   <header class="d-flex justify-content-between align-items-center" style="padding: 10px 16px;">
       <div class="d-flex align-items-center">
         <i class="fa-solid fa-compass text-primary me-2 fs-5"></i>
-        <h1>AMAC FR5</h1>
+        <h1>FR5</h1>
       </div>
     <div class="d-flex align-items-center gap-3">
       <div class="small d-flex align-items-center me-1">
         <span class="status-dot positioning" id="gps-status-dot"></span>
         <span class="text-warning small fw-bold" id="gps-status-text">測位中...</span>
       </div>
-      <button class="btn btn-sm btn-gradient-primary fw-bold py-2 px-3 d-flex align-items-center gap-1" id="btn-toggle-tracking" style="font-size: 0.9rem; border-radius: 8px;">
+      <button class="btn btn-sm btn-gradient-primary fw-bold py-2 px-3 d-flex align-items-center gap-1" id="btn-toggle-tracking" style="font-size: 0.9rem; border-radius: 8px; white-space: nowrap;">
         <i class="fa-solid fa-play" id="tracking-icon" style="font-size: 0.8rem;"></i>
-        <span id="tracking-btn-text">調査開始</span>
+        <span id="tracking-btn-text">トラック開始</span>
       </button>
     </div>
   </header>
@@ -531,7 +535,7 @@
             <span class="ms-2 fw-bold text-primary" id="form-coords">位置情報未取得</span>
           </div>
           <button class="btn btn-sm btn-outline-primary fw-bold py-1 px-3" id="btn-refresh-form-coords" type="button" style="font-size: 0.9rem;">
-            <i class="fa-solid fa-arrows-rotate me-1"></i> 位置更新
+            <i class="fa-solid fa-arrows-rotate me-1"></i> 更新
           </button>
         </div>
 
@@ -591,7 +595,7 @@
           </div>
 
           <div class="mb-4">
-            <label class="form-label d-block">現地写真撮影 <span class="text-secondary">(200KB自動圧縮)</span></label>
+            <label class="form-label d-block">現地写真撮影</label>
             <input type="file" id="camera-input" accept="image/*" capture="environment" class="d-none">
             <div class="photo-capture-wrapper" id="photo-trigger">
               <i class="fa-solid fa-camera fa-2x text-muted mb-2 d-block" id="camera-icon"></i>
@@ -601,7 +605,7 @@
           </div>
 
           <button type="submit" class="btn btn-gradient-primary w-100 py-3 mt-2">
-            <i class="fa-solid fa-plus me-1"></i> フォーム追加 (保存)
+            <i class="fa-solid fa-plus me-1"></i> 保存
           </button>
         </form>
       </div>
@@ -694,7 +698,7 @@
   <!-- Mapbox shp-write CDN -->
   <script src="https://unpkg.com/@mapbox/shp-write@latest/shpwrite.js"></script>
 
-  <!-- カスタムアプリケーションロジック (キャッシュバスター付き v1.2.2) -->
-  <script src="app.js?v=1.2.2"></script>
+  <!-- カスタムアプリケーションロジック (キャッシュバスター付き v1.2.3) -->
+  <script src="app.js?v=1.2.3"></script>
 </body>
 </html>
