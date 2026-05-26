@@ -478,6 +478,25 @@
         <!-- マップ描画先 -->
         <div id="map"></div>
         
+        <!-- GPS測位ステータスインジケーター（フローティング） -->
+        <div id="gps-positioning-indicator" class="glass-panel d-flex align-items-center gap-2" style="
+          position: absolute;
+          top: 15px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 1000;
+          padding: 8px 16px;
+          border-radius: 20px;
+          box-shadow: 0 4px 16px rgba(15, 23, 42, 0.18);
+          font-size: 0.9rem;
+          font-weight: bold;
+          background: rgba(255, 255, 255, 0.95);
+          border: 2px solid var(--accent-warning);
+        ">
+          <span class="status-dot" style="width: 10px; height: 10px; border-radius: 50%; background-color: #92400e; box-shadow: 0 0 8px #92400e; animation: pulse 1.5s infinite; margin-right: 0; display: inline-block;"></span>
+          <span class="text-dark animate-pulse" id="gps-positioning-text">測位中...</span>
+        </div>
+        
         <!-- マップ上のフローティング操作系 -->
         <div class="map-overlay-controls">
           <div class="map-btn" id="btn-recenter" title="現在地に移動">

@@ -35,11 +35,12 @@ let trackingIntervalId = null;
 let watchPositionId = null;
 let currentSessionId = null;
 
-// Firebaseリアルタイム共有用のグローバル変数
+// Firebaseリアルタイム共有・GPSステータス用のグローバル変数
 let realtimeLocationIntervalId = null; // 10分ごとのFirestore更新タイマーID
 let otherUsersMarkers = {};            // 他の調査員のマーカー管理 (username -> L.marker)
 let otherUsersPolylines = {};          // 他の調査員の軌跡管理 (username -> L.polyline)
 let showOtherUsers = true;             // 他ユーザーの表示切替フラグ
+let hasInitialCenteringDone = false;   // 初回位置測位でのマップ中央寄せ完了フラグ
 
 // ==========================================
 // 2. LIFECYCLE & EVENT LISTENERS
@@ -269,6 +270,13 @@ async function loadExistingTracksOnMap() {
 function startGpsMonitoring() {
   if (!navigator.geolocation) {
     updateGpsStatus(false, "GPS非対応端末");
+    const indicator = document.getElementById("gps-positioning-indicator");
+    if (indicator) {
+      indicator.style.display = "flex";
+      indicator.style.borderColor = "var(--accent-danger)";
+      const text = document.getElementById("gps-positioning-text");
+      if (text) text.innerText = "GPS非対応";
+    }
     return;
   }
 
@@ -292,10 +300,31 @@ function startGpsMonitoring() {
 
       // マップの現在地マーク更新
       updateMapMarker(lat, lng, accuracy);
+
+      // 初回位置取得時の自動センタリング (現時点を中心に示す)
+      if (!hasInitialCenteringDone && map) {
+        map.setView([lat, lng], 17);
+        hasInitialCenteringDone = true;
+      }
+
+      // GPS測位完了によりインジケーターを非表示化
+      const indicator = document.getElementById("gps-positioning-indicator");
+      if (indicator) {
+        indicator.style.display = "none";
+      }
     },
     (error) => {
       console.warn("GPSエラー:", error.message);
       updateGpsStatus(false, "位置取得失敗");
+
+      // GPSが失われた場合はインジケーターを再度表示
+      const indicator = document.getElementById("gps-positioning-indicator");
+      if (indicator) {
+        indicator.style.display = "flex";
+        indicator.style.borderColor = "var(--accent-warning)";
+        const text = document.getElementById("gps-positioning-text");
+        if (text) text.innerText = "測位中...";
+      }
     },
     gpsOptions
   );
