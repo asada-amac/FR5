@@ -477,39 +477,6 @@
         <!-- マップ描画先 -->
         <div id="map"></div>
         
-        <!-- リアルタイム共有ステータスパネル -->
-        <div class="glass-panel active-users-panel" id="active-users-panel" style="
-          position: absolute;
-          top: 110px;
-          left: 12px;
-          z-index: 1000;
-          padding: 10px 14px;
-          border-radius: 12px;
-          box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
-          width: calc(100% - 24px);
-          max-width: 220px;
-          font-size: 0.85rem;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        ">
-          <div class="d-flex align-items-center justify-content-between">
-            <div class="fw-bold d-flex align-items-center text-dark">
-              <span class="status-dot active" id="realtime-status-dot" style="width: 8px; height: 8px; margin-right: 6px; background-color: #10b981; box-shadow: 0 0 8px #10b981; display: inline-block; border-radius: 50%;"></span>
-              リアルタイム共有中
-            </div>
-            <button id="btn-toggle-others" class="btn btn-xs btn-primary p-0 px-2 fw-bold text-white" style="font-size: 0.7rem; border-radius: 4px;" title="他ユーザーの表示/非表示">
-              表示ON
-            </button>
-          </div>
-          <div id="active-users-list" class="mt-1" style="max-height: 100px; overflow-y: auto; font-size: 0.75rem; border-top: 1px solid var(--glass-border); padding-top: 4px;">
-            <div class="text-secondary small py-1 text-center">他調査員の接続なし</div>
-          </div>
-          <div class="text-secondary" style="font-size: 0.65rem; border-top: 1px solid var(--glass-border); padding-top: 4px;" id="realtime-last-sync">
-            最終同期: --:--:--
-          </div>
-        </div>
-        
         <!-- マップ上のフローティング操作系 -->
         <div class="map-overlay-controls">
           <div class="map-btn" id="btn-recenter" title="現在地に移動">
@@ -518,28 +485,11 @@
         </div>
 
         <!-- 調査ステータスパネル -->
-        <div class="glass-panel map-tracking-panel">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <div>
-              <span class="fw-bold text-info small">軌跡トラッキング</span>
-              <div class="text-secondary" style="font-size: 0.7rem;" id="track-stat">停止中</div>
-            </div>
-            <div>
-              <span class="badge bg-dark border border-secondary" id="track-count">0 点記録</span>
-            </div>
-          </div>
-          <div class="row g-2">
-            <div class="col-6">
-              <button class="btn btn-sm btn-gradient-primary w-100 py-2" id="btn-start-track">
-                <i class="fa-solid fa-play me-1"></i> 調査開始
-              </button>
-            </div>
-            <div class="col-6">
-              <button class="btn btn-sm btn-danger w-100 py-2" id="btn-stop-track" disabled>
-                <i class="fa-solid fa-stop me-1"></i> 調査一時停止
-              </button>
-            </div>
-          </div>
+        <div class="glass-panel map-tracking-panel" style="padding: 10px 12px;">
+          <button class="btn btn-gradient-primary w-100 py-3 fw-bold fs-5 d-flex align-items-center justify-content-center gap-2" id="btn-toggle-tracking">
+            <i class="fa-solid fa-play" id="tracking-icon"></i>
+            <span id="tracking-btn-text">調査開始</span>
+          </button>
         </div>
       </div>
     </div>

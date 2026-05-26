@@ -125,8 +125,17 @@ function initUI() {
   });
 
   // 調査開始・停止ボタン
-  document.getElementById("btn-start-track").addEventListener("click", startTracking);
-  document.getElementById("btn-stop-track").addEventListener("click", stopTracking);
+  // 調査開始・停止のトグルボタン (単一ボタン化)
+  const toggleTrackingBtn = document.getElementById("btn-toggle-tracking");
+  if (toggleTrackingBtn) {
+    toggleTrackingBtn.addEventListener("click", () => {
+      if (!trackingIntervalId) {
+        startTracking();
+      } else {
+        stopTracking();
+      }
+    });
+  }
 
   // 写真選択・撮影のトリガー
   const photoTrigger = document.getElementById("photo-trigger");
@@ -145,41 +154,6 @@ function initUI() {
 
   // GAS一括送信ボタン
   document.getElementById("btn-submit-gas").addEventListener("click", submitAllDataToGAS);
-
-  // 他調査員の表示トグルボタン (マーカーと軌跡の両方を制御)
-  const toggleOthersBtn = document.getElementById("btn-toggle-others");
-  if (toggleOthersBtn) {
-    toggleOthersBtn.addEventListener("click", () => {
-      showOtherUsers = !showOtherUsers;
-      if (showOtherUsers) {
-        toggleOthersBtn.innerText = "表示ON";
-        toggleOthersBtn.className = "btn btn-xs btn-primary p-0 px-2 fw-bold text-white";
-        Object.keys(otherUsersMarkers).forEach(username => {
-          if (otherUsersMarkers[username] && map) {
-            otherUsersMarkers[username].addTo(map);
-          }
-        });
-        Object.keys(otherUsersPolylines).forEach(username => {
-          if (otherUsersPolylines[username] && map) {
-            otherUsersPolylines[username].addTo(map);
-          }
-        });
-      } else {
-        toggleOthersBtn.innerText = "表示OFF";
-        toggleOthersBtn.className = "btn btn-xs btn-outline-secondary p-0 px-2 fw-bold text-white";
-        Object.keys(otherUsersMarkers).forEach(username => {
-          if (otherUsersMarkers[username] && map) {
-            map.removeLayer(otherUsersMarkers[username]);
-          }
-        });
-        Object.keys(otherUsersPolylines).forEach(username => {
-          if (otherUsersPolylines[username] && map) {
-            map.removeLayer(otherUsersPolylines[username]);
-          }
-        });
-      }
-    });
-  }
 
   // ページを閉じる・遷移する際、非同期で自身のリアルタイム位置を削除する後始末
   window.addEventListener("beforeunload", () => {
@@ -415,11 +389,15 @@ function startTracking() {
   currentSessionId = crypto.randomUUID();
   sessionStorage.setItem("current_session_id", currentSessionId);
 
-  // UI状態の更新
-  document.getElementById("btn-start-track").disabled = true;
-  document.getElementById("btn-stop-track").disabled = false;
-  document.getElementById("track-stat").innerText = "調査中 (1分間隔で記録)";
-  document.getElementById("track-stat").className = "text-success fw-bold";
+  // UI状態の更新 (単一トグルボタン化)
+  const toggleBtn = document.getElementById("btn-toggle-tracking");
+  if (toggleBtn) {
+    toggleBtn.className = "btn btn-gradient-success w-100 py-3 fw-bold fs-5 d-flex align-items-center justify-content-center gap-2";
+    const icon = document.getElementById("tracking-icon");
+    if (icon) icon.className = "fa-solid fa-circle-stop";
+    const textStr = document.getElementById("tracking-btn-text");
+    if (textStr) textStr.innerText = "調査中（押すと停止）";
+  }
 
   // 開始時の現在点を直ちに記録
   recordCurrentTrackPoint();
@@ -499,7 +477,10 @@ async function recordCurrentTrackPoint() {
 // トラックUIとマップ描画のリアルタイム同期
 async function updateTrackUiAndMap() {
   const allTracks = await db.tracks.orderBy("timestamp").toArray();
-  document.getElementById("track-count").innerText = `${allTracks.length} 点記録`;
+  const trackCountEl = document.getElementById("track-count");
+  if (trackCountEl) {
+    trackCountEl.innerText = `${allTracks.length} 点記録`;
+  }
   document.getElementById("track-count-display").innerText = allTracks.length;
 
   // マップのラインを引く
@@ -525,10 +506,15 @@ async function stopTracking() {
   // 調査一時停止時に自身のリアルタイム位置情報をFirestoreから確実に削除
   await removeRealtimeLocation();
 
-  document.getElementById("btn-start-track").disabled = false;
-  document.getElementById("btn-stop-track").disabled = true;
-  document.getElementById("track-stat").innerText = "一時停止中";
-  document.getElementById("track-stat").className = "text-warning";
+  // UI状態の更新 (単一トグルボタン化)
+  const toggleBtn = document.getElementById("btn-toggle-tracking");
+  if (toggleBtn) {
+    toggleBtn.className = "btn btn-gradient-primary w-100 py-3 fw-bold fs-5 d-flex align-items-center justify-content-center gap-2";
+    const icon = document.getElementById("tracking-icon");
+    if (icon) icon.className = "fa-solid fa-play";
+    const textStr = document.getElementById("tracking-btn-text");
+    if (textStr) textStr.innerText = "調査開始";
+  }
 
   alert("トラッキングを一時停止しました。");
 }
