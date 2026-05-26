@@ -164,7 +164,43 @@ function initUI() {
     }
   });
 
+  // 地点分類のチップ選択イベント (イベント委譲)
+  const categoryGroup = document.getElementById("category-button-group");
+  if (categoryGroup) {
+    categoryGroup.addEventListener("click", (e) => {
+      const button = e.target.closest(".btn-chip");
+      if (!button) return;
+      
+      // 全ボタンから選択状態を除去
+      categoryGroup.querySelectorAll(".btn-chip").forEach(btn => btn.classList.remove("selected"));
+      // クリックされたボタンを選択状態にする
+      button.classList.add("selected");
+      // 隠しフィールドの値を更新
+      document.getElementById("spot-category").value = button.getAttribute("data-value");
+    });
+  }
 
+  // 種名のチップ選択イベント (イベント委譲)
+  const speciesGroup = document.getElementById("species-button-group");
+  if (speciesGroup) {
+    // 初期選択スタイル設定
+    const defaultBtn = speciesGroup.querySelector('[data-value="イノシシ"]');
+    if (defaultBtn) {
+      defaultBtn.classList.add("selected");
+    }
+
+    speciesGroup.addEventListener("click", (e) => {
+      const button = e.target.closest(".btn-chip");
+      if (!button) return;
+      
+      // 全ボタンから選択状態を除去
+      speciesGroup.querySelectorAll(".btn-chip").forEach(btn => btn.classList.remove("selected"));
+      // クリックされたボタンを選択状態にする
+      button.classList.add("selected");
+      // 隠しフィールドの値を更新
+      document.getElementById("species-name").value = button.getAttribute("data-value");
+    });
+  }
 }
 
 // 端末内データ件数の同期
@@ -691,6 +727,7 @@ async function handleSurveySubmit(e) {
     // フォームと写真選択のリセット
     document.getElementById("survey-form").reset();
     resetPhotoSelector();
+    resetFormCustomFields();
     
     // UI同期
     await initDBStats();
@@ -728,17 +765,63 @@ function resetPhotoSelector() {
   document.getElementById("camera-input").value = "";
 }
 
+// チップ型選択フォームのリセット
+function resetFormCustomFields() {
+  // 地点分類のリセット
+  const spotCategoryInput = document.getElementById("spot-category");
+  if (spotCategoryInput) {
+    spotCategoryInput.value = "";
+  }
+  const catGroup = document.getElementById("category-button-group");
+  if (catGroup) {
+    catGroup.querySelectorAll(".btn-chip").forEach(btn => btn.classList.remove("selected"));
+  }
+  
+  // 種名のリセット (デフォルトはイノシシ)
+  const speciesNameInput = document.getElementById("species-name");
+  if (speciesNameInput) {
+    speciesNameInput.value = "イノシシ";
+  }
+  const specGroup = document.getElementById("species-button-group");
+  if (specGroup) {
+    specGroup.querySelectorAll(".btn-chip").forEach(btn => {
+      if (btn.getAttribute("data-value") === "イノシシ") {
+        btn.classList.add("selected");
+      } else {
+        btn.classList.remove("selected");
+      }
+    });
+  }
+}
+
 // 分類別のピンカラー選定
 function getMarkerColorByCategory(cat) {
   switch (cat) {
-    case "哺乳類": return "#ef4444";
-    case "鳥類": return "#3b82f6";
-    case "両生・爬虫類": return "#10b981";
-    case "昆虫類": return "#f59e0b";
-    case "植物・植生": return "#84cc16";
-    case "人工構造物": return "#64748b";
-    case "自然地形": return "#06b6d4";
-    default: return "#a855f7";
+    case "聞き取り": return "#ef4444"; // 赤
+    case "目撃": return "#ec4899"; // ピンク
+    case "被害": return "#dc2626"; // 濃い赤
+    
+    case "掘り起こし": return "#d97706"; // アンバー
+    case "足跡": return "#f59e0b"; // オレンジ
+    case "獣道": return "#84cc16"; // 黄緑
+    case "食痕": return "#10b981"; // エメラルド
+    case "泥こすり": return "#059669"; // 濃い緑
+    case "ヌタ場": return "#0d9488"; // ティール
+    case "寝屋": return "#06b6d4"; // シアン
+    case "爪痕": return "#ea580c"; // 濃いオレンジ
+    
+    case "箱わな": return "#2563eb"; // 青
+    case "くくりわな": return "#3b82f6"; // ライトブルー
+    case "囲いわな": return "#4f46e5"; // インディゴ
+    case "小型わな": return "#6366f1"; // ライトインディゴ
+    
+    case "電気柵": return "#475569"; // スレート
+    case "ワイヤーメッシュ": return "#64748b"; // グレー
+    case "金網柵": return "#94a3b8"; // ライトグレー
+    case "その他柵": return "#cbd5e1"; // シルバー
+    
+    case "カメラ": return "#16a34a"; // 緑
+    default: return "#a855f7"; // その他は紫
   }
 }
 

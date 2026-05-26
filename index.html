@@ -421,6 +421,29 @@
     .leaflet-control-zoom-in, .leaflet-control-zoom-out {
       border-radius: 6px !important;
     }
+    
+    /* チップ型選択ボタンのスタイル */
+    .btn-chip {
+      border-radius: 20px !important;
+      padding: 8px 16px !important;
+      font-size: 0.95rem !important;
+      font-weight: 700 !important;
+      transition: all 0.2s ease !important;
+      border: 2px solid #94a3b8 !important; /* はっきり見えやすい太枠 */
+      background-color: #ffffff !important;
+      color: var(--text-main) !important;
+      cursor: pointer;
+    }
+    .btn-chip:hover {
+      border-color: var(--accent-color) !important;
+      background-color: #f1f5f9 !important;
+    }
+    .btn-chip.selected {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%) !important;
+      border-color: #1e40af !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3) !important;
+    }
   </style>
 </head>
 <body>
@@ -525,23 +548,47 @@
 
         <form id="survey-form">
           <div class="mb-3">
-            <label class="form-label" for="spot-category">地点分類 <span class="text-danger">*</span></label>
-            <select class="form-select" id="spot-category" required>
-              <option value="" disabled selected>分類を選択してください</option>
-              <option value="哺乳類">哺乳類</option>
-              <option value="鳥類">鳥類</option>
-              <option value="両生・爬虫類">両生・爬虫類</option>
-              <option value="昆虫類">昆虫類</option>
-              <option value="植物・植生">植物・植生</option>
-              <option value="人工構造物">人工構造物</option>
-              <option value="自然地形">自然地形</option>
-              <option value="その他">その他</option>
-            </select>
+            <label class="form-label">地点分類 <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2 py-1" id="category-button-group">
+              <button type="button" class="btn btn-chip" data-value="聞き取り">聞き取り</button>
+              <button type="button" class="btn btn-chip" data-value="掘り起こし">掘り起こし</button>
+              <button type="button" class="btn btn-chip" data-value="足跡">足跡</button>
+              <button type="button" class="btn btn-chip" data-value="獣道">獣道</button>
+              <button type="button" class="btn btn-chip" data-value="食痕">食痕</button>
+              <button type="button" class="btn btn-chip" data-value="泥こすり">泥こすり</button>
+              <button type="button" class="btn btn-chip" data-value="ヌタ場">ヌタ場</button>
+              <button type="button" class="btn btn-chip" data-value="寝屋">寝屋</button>
+              <button type="button" class="btn btn-chip" data-value="爪痕">爪痕</button>
+              <button type="button" class="btn btn-chip" data-value="目撃">目撃</button>
+              <button type="button" class="btn btn-chip" data-value="被害">被害</button>
+              <button type="button" class="btn btn-chip" data-value="箱わな">箱わな</button>
+              <button type="button" class="btn btn-chip" data-value="くくりわな">くくりわな</button>
+              <button type="button" class="btn btn-chip" data-value="囲いわな">囲いわな</button>
+              <button type="button" class="btn btn-chip" data-value="小型わな">小型わな</button>
+              <button type="button" class="btn btn-chip" data-value="電気柵">電気柵</button>
+              <button type="button" class="btn btn-chip" data-value="ワイヤーメッシュ">ワイヤーメッシュ</button>
+              <button type="button" class="btn btn-chip" data-value="金網柵">金網柵</button>
+              <button type="button" class="btn btn-chip" data-value="その他柵">その他柵</button>
+              <button type="button" class="btn btn-chip" data-value="その他">その他</button>
+              <button type="button" class="btn btn-chip" data-value="カメラ">カメラ</button>
+            </div>
+            <input type="hidden" id="spot-category" required value="">
           </div>
 
           <div class="mb-3">
-            <label class="form-label" for="species-name">種名 / 対象物名 <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="species-name" placeholder="例: タヌキ、崩壊地など" required autocomplete="off">
+            <label class="form-label">種名 <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2 py-1" id="species-button-group">
+              <button type="button" class="btn btn-chip selected" data-value="イノシシ">イノシシ</button>
+              <button type="button" class="btn btn-chip" data-value="アライグマ">アライグマ</button>
+              <button type="button" class="btn btn-chip" data-value="ハクビシン">ハクビシン</button>
+              <button type="button" class="btn btn-chip" data-value="シカ">シカ</button>
+              <button type="button" class="btn btn-chip" data-value="サル">サル</button>
+              <button type="button" class="btn btn-chip" data-value="キョン">キョン</button>
+              <button type="button" class="btn btn-chip" data-value="アナグマ">アナグマ</button>
+              <button type="button" class="btn btn-chip" data-value="タヌキ">タヌキ</button>
+              <button type="button" class="btn btn-chip" data-value="その他">その他</button>
+            </div>
+            <input type="hidden" id="species-name" required value="イノシシ">
           </div>
 
           <div class="mb-3">
@@ -551,7 +598,7 @@
 
           <div class="mb-3">
             <label class="form-label" for="interview-target">聞き取り対象</label>
-            <input type="text" class="form-control" id="interview-target" placeholder="例: 地元住民Aさん、聞き取りなし" autocomplete="off">
+            <input type="text" class="form-control" id="interview-target" placeholder="70代女性　など" autocomplete="off">
           </div>
 
           <div class="mb-4">
@@ -658,7 +705,7 @@
   <!-- Mapbox shp-write CDN -->
   <script src="https://unpkg.com/@mapbox/shp-write@latest/shpwrite.js"></script>
 
-  <!-- カスタムアプリケーションロジック (キャッシュバスター付き v1.1.0) -->
-  <script src="app.js?v=1.1.0"></script>
+  <!-- カスタムアプリケーションロジック (キャッシュバスター付き v1.2.0) -->
+  <script src="app.js?v=1.2.0"></script>
 </body>
 </html>
