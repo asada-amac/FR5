@@ -192,7 +192,10 @@ function checkLogin() {
 
 // ログイン後のアプリ初期化
 function initApp(username) {
-  document.getElementById("badge-username").innerText = username;
+  const badgeUsername = document.getElementById("badge-username");
+  if (badgeUsername) {
+    badgeUsername.innerText = username;
+  }
   document.getElementById("config-username").innerText = username;
 
   // 地図の初期化
@@ -389,10 +392,10 @@ function startTracking() {
   currentSessionId = crypto.randomUUID();
   sessionStorage.setItem("current_session_id", currentSessionId);
 
-  // UI状態の更新 (単一トグルボタン化)
+  // UI状態の更新 (単一トグルボタン化 - ヘッダー用)
   const toggleBtn = document.getElementById("btn-toggle-tracking");
   if (toggleBtn) {
-    toggleBtn.className = "btn btn-gradient-success w-100 py-3 fw-bold fs-5 d-flex align-items-center justify-content-center gap-2";
+    toggleBtn.className = "btn btn-sm btn-gradient-success fw-bold py-2 px-3 d-flex align-items-center gap-1";
     const icon = document.getElementById("tracking-icon");
     if (icon) icon.className = "fa-solid fa-circle-stop";
     const textStr = document.getElementById("tracking-btn-text");
@@ -506,10 +509,10 @@ async function stopTracking() {
   // 調査一時停止時に自身のリアルタイム位置情報をFirestoreから確実に削除
   await removeRealtimeLocation();
 
-  // UI状態の更新 (単一トグルボタン化)
+  // UI状態の更新 (単一トグルボタン化 - ヘッダー用)
   const toggleBtn = document.getElementById("btn-toggle-tracking");
   if (toggleBtn) {
-    toggleBtn.className = "btn btn-gradient-primary w-100 py-3 fw-bold fs-5 d-flex align-items-center justify-content-center gap-2";
+    toggleBtn.className = "btn btn-sm btn-gradient-primary fw-bold py-2 px-3 d-flex align-items-center gap-1";
     const icon = document.getElementById("tracking-icon");
     if (icon) icon.className = "fa-solid fa-play";
     const textStr = document.getElementById("tracking-btn-text");

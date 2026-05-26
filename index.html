@@ -452,19 +452,20 @@
   </div>
 
   <!-- アプリヘッダー -->
-  <header class="d-flex justify-content-between align-items-center">
+  <header class="d-flex justify-content-between align-items-center" style="padding: 10px 16px;">
       <div class="d-flex align-items-center">
         <i class="fa-solid fa-compass text-primary me-2 fs-5"></i>
         <h1>AMAC FR5</h1>
       </div>
-    <div class="small d-flex align-items-center gap-3">
-      <div>
+    <div class="d-flex align-items-center gap-3">
+      <div class="small d-flex align-items-center me-1">
         <span class="status-dot" id="gps-status-dot"></span>
-        <span class="text-secondary" id="gps-status-text">GPS Off</span>
+        <span class="text-secondary small fw-bold" id="gps-status-text">GPS Off</span>
       </div>
-      <div>
-        <span class="badge bg-secondary py-1" id="badge-username">---</span>
-      </div>
+      <button class="btn btn-sm btn-gradient-primary fw-bold py-2 px-3 d-flex align-items-center gap-1" id="btn-toggle-tracking" style="font-size: 0.9rem; border-radius: 8px;">
+        <i class="fa-solid fa-play" id="tracking-icon" style="font-size: 0.8rem;"></i>
+        <span id="tracking-btn-text">調査開始</span>
+      </button>
     </div>
   </header>
 
@@ -482,14 +483,6 @@
           <div class="map-btn" id="btn-recenter" title="現在地に移動">
             <i class="fa-solid fa-crosshairs"></i>
           </div>
-        </div>
-
-        <!-- 調査ステータスパネル -->
-        <div class="glass-panel map-tracking-panel" style="padding: 10px 12px;">
-          <button class="btn btn-gradient-primary w-100 py-3 fw-bold fs-5 d-flex align-items-center justify-content-center gap-2" id="btn-toggle-tracking">
-            <i class="fa-solid fa-play" id="tracking-icon"></i>
-            <span id="tracking-btn-text">調査開始</span>
-          </button>
         </div>
       </div>
     </div>
