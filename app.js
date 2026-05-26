@@ -1,7 +1,21 @@
 // ==========================================
-// 1. CONSTANTS & INITIALIZATION
+// 1. FIREBASE & APP INITIALIZATION
 // ==========================================
 const GAS_URL = "https://script.google.com/macros/s/AKfycbx_OirHKvZF_zeee6ZqgwiKR4yRqRj_jnHH5KbwJcRWe6i3iPppxGFlm5lYQccSG_rW/exec";
+
+// Firebaseの設定と初期化 (Compat v10)
+const firebaseConfig = {
+  apiKey: "AIzaSyCd9CKodyXBOQLylgZR26FuyNp6mDKuza0",
+  authDomain: "fieldresearch5.firebaseapp.com",
+  projectId: "fieldresearch5",
+  storageBucket: "fieldresearch5.firebasestorage.app",
+  messagingSenderId: "68930595789",
+  appId: "1:68930595789:web:deba33f203d1ec66e47284"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const dbFirestore = firebase.firestore();
 
 // Dexie.js (IndexedDBラッパー) の初期化
 const db = new Dexie("FieldSurveyDatabase");
@@ -20,6 +34,11 @@ let latestCoords = { lat: null, lng: null, accuracy: null };
 let trackingIntervalId = null;
 let watchPositionId = null;
 let currentSessionId = null;
+
+// Firebaseリアルタイム共有用のグローバル変数
+let realtimeLocationIntervalId = null; // 10分ごとのFirestore更新タイマーID
+let otherUsersMarkers = {};            // 他の調査員のマーカー管理 (username -> L.marker)
+let showOtherUsers = true;             // 他ユーザーの表示切替フラグ
 
 // ==========================================
 // 2. LIFECYCLE & EVENT LISTENERS
@@ -72,9 +91,18 @@ function initUI() {
     }
   });
 
-  // ログアウトボタン
-  document.getElementById("btn-change-user").addEventListener("click", () => {
+  // ログアウトボタン (自身のリアルタイム位置を確実に消去してからログアウトするよう拡張)
+  document.getElementById("btn-change-user").addEventListener("click", async () => {
     if (confirm("ログアウトしますか？（保存済みの調査データは削除されません）")) {
+      const username = sessionStorage.getItem("surveyor_name");
+      if (username) {
+        try {
+          await dbFirestore.collection("active_users").doc(username).delete();
+          console.log("Firestoreから自身のリアルタイム位置を削除しました");
+        } catch (e) {
+          console.error("ログアウト時のFirestore削除失敗:", e);
+        }
+      }
       sessionStorage.removeItem("surveyor_name");
       location.reload();
     }
@@ -117,6 +145,39 @@ function initUI() {
   // GAS一括送信ボタン
   document.getElementById("btn-submit-gas").addEventListener("click", submitAllDataToGAS);
 
+  // 他調査員の表示トグルボタン
+  const toggleOthersBtn = document.getElementById("btn-toggle-others");
+  if (toggleOthersBtn) {
+    toggleOthersBtn.addEventListener("click", () => {
+      showOtherUsers = !showOtherUsers;
+      if (showOtherUsers) {
+        toggleOthersBtn.innerText = "表示ON";
+        toggleOthersBtn.className = "btn btn-xs btn-primary p-0 px-2 fw-bold text-white";
+        Object.keys(otherUsersMarkers).forEach(username => {
+          if (otherUsersMarkers[username] && map) {
+            otherUsersMarkers[username].addTo(map);
+          }
+        });
+      } else {
+        toggleOthersBtn.innerText = "表示OFF";
+        toggleOthersBtn.className = "btn btn-xs btn-outline-secondary p-0 px-2 fw-bold text-white";
+        Object.keys(otherUsersMarkers).forEach(username => {
+          if (otherUsersMarkers[username] && map) {
+            map.removeLayer(otherUsersMarkers[username]);
+          }
+        });
+      }
+    });
+  }
+
+  // ページを閉じる・遷移する際、非同期で自身のリアルタイム位置を削除する後始末
+  window.addEventListener("beforeunload", () => {
+    const username = sessionStorage.getItem("surveyor_name");
+    if (username) {
+      dbFirestore.collection("active_users").doc(username).delete();
+    }
+  });
+
 
 }
 
@@ -154,6 +215,22 @@ function initApp(username) {
 
   // Geolocationの監視を開始
   startGpsMonitoring();
+
+  // Firebase 匿名認証を実行してリアルタイムリッスンを開始
+  auth.signInAnonymously()
+    .then((userCredential) => {
+      console.log("Firebase 匿名ログイン成功: ", userCredential.user.uid);
+      listenToOtherUsers();
+      
+      // すでにトラッキングタイマーが動作中（リロード時など）なら直ちに初回位置更新を行う
+      if (trackingIntervalId && latestCoords.lat && latestCoords.lng) {
+        updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
+      }
+    })
+    .catch((error) => {
+      console.error("Firebase 匿名ログイン失敗: ", error);
+      alert("リアルタイム同期サーバーとの接続に失敗しました。オフライン機能は引き続き動作します。");
+    });
 }
 
 // ==========================================
@@ -336,6 +413,16 @@ function startTracking() {
   // 開始時の現在点を直ちに記録
   recordCurrentTrackPoint();
 
+  // Firebase リアルタイム位置情報の即時更新 & 10分ごとの定期更新タイマー開始
+  const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+  updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
+  realtimeLocationIntervalId = setInterval(() => {
+    const currentUsername = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+    if (latestCoords.lat && latestCoords.lng) {
+      updateRealtimeLocation(currentUsername, latestCoords.lat, latestCoords.lng);
+    }
+  }, 10 * 60 * 1000); // 10分間隔
+
   // 1分ごとに定期記録するインターバルをセット (60000 ms)
   trackingIntervalId = setInterval(() => {
     recordCurrentTrackPoint();
@@ -410,7 +497,7 @@ async function updateTrackUiAndMap() {
 }
 
 // トラッキングの一時停止
-function stopTracking() {
+async function stopTracking() {
   if (trackingIntervalId) {
     clearInterval(trackingIntervalId);
     trackingIntervalId = null;
@@ -419,6 +506,13 @@ function stopTracking() {
     navigator.geolocation.clearWatch(watchPositionId);
     watchPositionId = null;
   }
+  if (realtimeLocationIntervalId) {
+    clearInterval(realtimeLocationIntervalId);
+    realtimeLocationIntervalId = null;
+  }
+
+  // 調査一時停止時に自身のリアルタイム位置情報をFirestoreから確実に削除
+  await removeRealtimeLocation();
 
   document.getElementById("btn-start-track").disabled = false;
   document.getElementById("btn-stop-track").disabled = true;
@@ -791,6 +885,179 @@ async function submitAllDataToGAS() {
     loadingOverlay.style.display = "none";
     alert(`送信に失敗しました。\n接続環境を確認するか、時間をおいてやり直してください。\n\n詳細: ${err.message}`);
   }
+}
+
+// ==========================================
+// 8. FIREBASE REALTIME SHARING FUNCTIONS
+// ==========================================
+
+// 自身の位置情報をFirestoreに保存/上書きする
+async function updateRealtimeLocation(username, lat, lng) {
+  if (!lat || !lng) return;
+  try {
+    const sessionId = currentSessionId || sessionStorage.getItem("current_session_id") || "no_session";
+    const docId = username;
+
+    await dbFirestore.collection("active_users").doc(docId).set({
+      username: username,
+      lat: lat,
+      lng: lng,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      sessionId: sessionId
+    }, { merge: true });
+
+    console.log("リアルタイム位置をFirestoreに更新しました:", docId, lat, lng);
+  } catch (error) {
+    console.error("Firestoreへの位置更新失敗:", error);
+  }
+}
+
+// 自身の位置情報をFirestoreから削除する
+async function removeRealtimeLocation() {
+  const username = sessionStorage.getItem("surveyor_name");
+  if (!username) return;
+  try {
+    await dbFirestore.collection("active_users").doc(username).delete();
+    console.log("Firestoreから自身のリアルタイム位置を削除しました:", username);
+  } catch (error) {
+    console.error("Firestoreからの位置削除に失敗しました:", error);
+  }
+}
+
+// 他の調査員の現在位置をFirestoreからリッスンする
+function listenToOtherUsers() {
+  const currentUsername = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+  const realtimeDot = document.getElementById("realtime-status-dot");
+  const lastSyncText = document.getElementById("realtime-last-sync");
+
+  dbFirestore.collection("active_users").onSnapshot((snapshot) => {
+    const listContainer = document.getElementById("active-users-list");
+    if (!listContainer) return;
+    
+    listContainer.innerHTML = "";
+    let otherActiveCount = 0;
+    const now = new Date();
+
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      const username = doc.id;
+
+      // 自分以外のユーザーのみ処理対象とする
+      if (username !== currentUsername && data.lat && data.lng) {
+        otherActiveCount++;
+
+        // 1. パネルの接続中リストへ追加
+        const updateTime = data.timestamp ? data.timestamp.toDate() : new Date();
+        const diffMin = Math.round((now - updateTime) / 60000);
+        const timeStr = diffMin <= 0 ? "現在" : `${diffMin}分前`;
+
+        const userRow = document.createElement("div");
+        userRow.className = "d-flex justify-content-between align-items-center py-1 border-bottom border-light";
+        userRow.style.borderColor = "rgba(15, 23, 42, 0.05) !important";
+        userRow.innerHTML = `
+          <span class="fw-bold text-dark text-truncate" style="max-width: 110px;" title="${username}">${username}</span>
+          <span class="text-secondary text-nowrap" style="font-size: 0.68rem;">${timeStr} (${data.lat.toFixed(4)}, ${data.lng.toFixed(4)})</span>
+        `;
+        listContainer.appendChild(userRow);
+
+        // 2. マップ上のマーカー描画・更新
+        if (map) {
+          const popupContent = `
+            <div style="font-size: 0.85rem; line-height: 1.4;">
+              <span class="badge mb-1 text-white" style="background-color: #a855f7; font-weight: 700;">他調査員 (リアルタイム)</span><br>
+              <strong>調査者:</strong> ${username}<br>
+              <strong>座標:</strong> ${data.lat.toFixed(6)}, ${data.lng.toFixed(6)}<br>
+              <span class="small text-secondary">更新: ${updateTime.toLocaleTimeString()} (${timeStr})</span>
+            </div>
+          `;
+
+          if (otherUsersMarkers[username]) {
+            // マップにピンがあれば移動させてポップアップを更新
+            otherUsersMarkers[username].setLatLng([data.lat, data.lng]);
+            otherUsersMarkers[username].setPopupContent(popupContent);
+          } else {
+            // 新規ピン作成 (高コントラストで美しい紫色の円ピン)
+            const pinColor = "#a855f7";
+            const otherIcon = L.divIcon({
+              className: `custom-other-gps-${username.replace(/\s+/g, '_')}`,
+              html: `<div style="
+                width: 16px; 
+                height: 16px; 
+                background: ${pinColor}; 
+                border: 2px solid #ffffff; 
+                border-radius: 50%;
+                box-shadow: 0 0 10px ${pinColor};
+                display: flex;
+                justify-content: center;
+                align-items: center;
+              ">
+                <div style="width: 6px; height: 6px; background: #ffffff; border-radius: 50%;"></div>
+              </div>`,
+              iconSize: [16, 16],
+              iconAnchor: [8, 8]
+            });
+
+            const marker = L.marker([data.lat, data.lng], { icon: otherIcon })
+              .bindPopup(popupContent);
+
+            // 瞬時に判別できるようホバーツールチップを追加
+            marker.bindTooltip(username, {
+              permanent: false,
+              direction: 'top',
+              opacity: 0.95,
+              className: 'bg-dark text-white px-2 py-1 rounded shadow border-0 small fw-bold'
+            });
+
+            otherUsersMarkers[username] = marker;
+
+            // 表示設定がONの場合のみ地図へ描画
+            if (showOtherUsers) {
+              marker.addTo(map);
+            }
+          }
+        }
+      }
+    });
+
+    // 消えたユーザー（Firestoreからドキュメントがなくなった等）のマーカー削除
+    const currentDocIds = snapshot.docs.map(d => d.id);
+    Object.keys(otherUsersMarkers).forEach(username => {
+      if (!currentDocIds.includes(username)) {
+        if (otherUsersMarkers[username]) {
+          if (map) {
+            map.removeLayer(otherUsersMarkers[username]);
+          }
+          delete otherUsersMarkers[username];
+        }
+      }
+    });
+
+    // 他調査員の接続がない場合のフォールバック表示
+    if (otherActiveCount === 0) {
+      listContainer.innerHTML = `<div class="text-secondary small py-1 text-center">他調査員の接続なし</div>`;
+    }
+
+    // 最終同期インジケーターの更新
+    if (realtimeDot) {
+      realtimeDot.className = "status-dot active";
+      realtimeDot.style.backgroundColor = "#10b981";
+      realtimeDot.style.boxShadow = "0 0 8px #10b981";
+    }
+    if (lastSyncText) {
+      const timeNow = new Date();
+      lastSyncText.innerText = `最終同期: ${timeNow.toLocaleTimeString()}`;
+    }
+  }, (error) => {
+    console.error("Firestoreリアルタイム監視エラー:", error);
+    if (realtimeDot) {
+      realtimeDot.className = "status-dot";
+      realtimeDot.style.backgroundColor = "#ef4444";
+      realtimeDot.style.boxShadow = "0 0 8px #ef4444";
+    }
+    if (lastSyncText) {
+      lastSyncText.innerText = "エラー: 同期切断";
+    }
+  });
 }
 
 
