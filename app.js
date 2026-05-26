@@ -38,6 +38,7 @@ let currentSessionId = null;
 // Firebaseリアルタイム共有用のグローバル変数
 let realtimeLocationIntervalId = null; // 10分ごとのFirestore更新タイマーID
 let otherUsersMarkers = {};            // 他の調査員のマーカー管理 (username -> L.marker)
+let otherUsersPolylines = {};          // 他の調査員の軌跡ライン管理 (username -> L.polyline)
 let showOtherUsers = true;             // 他ユーザーの表示切替フラグ
 
 // ==========================================
@@ -153,17 +154,31 @@ function initUI() {
       if (showOtherUsers) {
         toggleOthersBtn.innerText = "表示ON";
         toggleOthersBtn.className = "btn btn-xs btn-primary p-0 px-2 fw-bold text-white";
+        // ピンの再表示
         Object.keys(otherUsersMarkers).forEach(username => {
           if (otherUsersMarkers[username] && map) {
             otherUsersMarkers[username].addTo(map);
           }
         });
+        // 軌跡ラインの再表示
+        Object.keys(otherUsersPolylines).forEach(username => {
+          if (otherUsersPolylines[username] && map) {
+            otherUsersPolylines[username].addTo(map);
+          }
+        });
       } else {
         toggleOthersBtn.innerText = "表示OFF";
         toggleOthersBtn.className = "btn btn-xs btn-outline-secondary p-0 px-2 fw-bold text-white";
+        // ピンの非表示
         Object.keys(otherUsersMarkers).forEach(username => {
           if (otherUsersMarkers[username] && map) {
             map.removeLayer(otherUsersMarkers[username]);
+          }
+        });
+        // 軌跡ラインの非表示
+        Object.keys(otherUsersPolylines).forEach(username => {
+          if (otherUsersPolylines[username] && map) {
+            map.removeLayer(otherUsersPolylines[username]);
           }
         });
       }
@@ -462,6 +477,9 @@ async function checkAndRecordAsync(position) {
 
     lastRecordedTime = now;
     updateTrackUiAndMap();
+    
+    // Firestoreのリアルタイム位置 & 本日の軌跡を同期
+    updateRealtimeLocation(username, lat, lng);
   }
 }
 
@@ -482,6 +500,9 @@ async function recordCurrentTrackPoint() {
 
     lastRecordedTime = now;
     updateTrackUiAndMap();
+    
+    // Firestoreのリアルタイム位置 & 本日の軌跡を同期
+    updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
   }
 }
 
@@ -898,17 +919,32 @@ async function updateRealtimeLocation(username, lat, lng) {
     const sessionId = currentSessionId || sessionStorage.getItem("current_session_id") || "no_session";
     const docId = username;
 
+    // 本日分の軌跡データを IndexedDB から抽出して Firestore に同期する
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayTracks = await db.tracks
+      .where("timestamp").aboveOrEqual(todayStart.getTime())
+      .toArray();
+    
+    const pathPoints = todayTracks.map(t => ({
+      lat: t.lat,
+      lng: t.lng,
+      timestamp: t.timestamp
+    }));
+
     await dbFirestore.collection("active_users").doc(docId).set({
       username: username,
       lat: lat,
       lng: lng,
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      sessionId: sessionId
+      sessionId: sessionId,
+      path: pathPoints
     }, { merge: true });
 
-    console.log("リアルタイム位置をFirestoreに更新しました:", docId, lat, lng);
+    console.log("リアルタイム位置・軌跡をFirestoreに同期しました:", docId, lat, lng, `${pathPoints.length}点`);
   } catch (error) {
-    console.error("Firestoreへの位置更新失敗:", error);
+    console.error("Firestoreへの位置・軌跡更新失敗:", error);
   }
 }
 
@@ -960,8 +996,9 @@ function listenToOtherUsers() {
         `;
         listContainer.appendChild(userRow);
 
-        // 2. マップ上のマーカー描画・更新
+        // 2. マップ上のマーカー・本日分軌跡ライン描画・更新
         if (map) {
+          // 2-a. マーカー（現在地ピン）の更新
           const popupContent = `
             <div style="font-size: 0.85rem; line-height: 1.4;">
               <span class="badge mb-1 text-white" style="background-color: #a855f7; font-weight: 700;">他調査員 (リアルタイム)</span><br>
@@ -1015,11 +1052,37 @@ function listenToOtherUsers() {
               marker.addTo(map);
             }
           }
+
+          // 2-b. 本日分軌跡ラインの更新・描画
+          const pathPoints = data.path || [];
+          // タイムスタンプ順に昇順ソートして線を正しく引く
+          pathPoints.sort((a, b) => a.timestamp - b.timestamp);
+          const latlngs = pathPoints.map(p => [p.lat, p.lng]);
+          
+          if (otherUsersPolylines[username]) {
+            otherUsersPolylines[username].setLatLngs(latlngs);
+          } else {
+            // 明るく柔らかいパープルの破線で美しく描画
+            const polylineColor = "#c084fc";
+            const polyline = L.polyline(latlngs, {
+              color: polylineColor,
+              weight: 3,
+              opacity: 0.75,
+              dashArray: "4, 6", // 自身の軌跡と視覚的に区別するため破線に
+              lineJoin: "round"
+            });
+            
+            otherUsersPolylines[username] = polyline;
+            
+            if (showOtherUsers) {
+              polyline.addTo(map);
+            }
+          }
         }
       }
     });
 
-    // 消えたユーザー（Firestoreからドキュメントがなくなった等）のマーカー削除
+    // 消えたユーザー（Firestoreからドキュメントがなくなった等）のマーカーおよび軌跡ライン削除
     const currentDocIds = snapshot.docs.map(d => d.id);
     Object.keys(otherUsersMarkers).forEach(username => {
       if (!currentDocIds.includes(username)) {
@@ -1028,6 +1091,12 @@ function listenToOtherUsers() {
             map.removeLayer(otherUsersMarkers[username]);
           }
           delete otherUsersMarkers[username];
+        }
+        if (otherUsersPolylines[username]) {
+          if (map) {
+            map.removeLayer(otherUsersPolylines[username]);
+          }
+          delete otherUsersPolylines[username];
         }
       }
     });
