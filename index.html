@@ -392,6 +392,12 @@
       box-shadow: 0 0 10px #059669;
       animation: pulse 1.5s infinite;
     }
+    
+    .status-dot.positioning {
+      background-color: #d97706; /* 視認性の高いアンバー */
+      box-shadow: 0 0 10px #d97706;
+      animation: pulse 1.5s infinite;
+    }
 
     @keyframes pulse {
       0% { opacity: 0.5; }
@@ -482,8 +488,8 @@
       </div>
     <div class="d-flex align-items-center gap-3">
       <div class="small d-flex align-items-center me-1">
-        <span class="status-dot" id="gps-status-dot"></span>
-        <span class="text-secondary small fw-bold" id="gps-status-text">GPS Off</span>
+        <span class="status-dot positioning" id="gps-status-dot"></span>
+        <span class="text-warning small fw-bold" id="gps-status-text">測位中...</span>
       </div>
       <button class="btn btn-sm btn-gradient-primary fw-bold py-2 px-3 d-flex align-items-center gap-1" id="btn-toggle-tracking" style="font-size: 0.9rem; border-radius: 8px;">
         <i class="fa-solid fa-play" id="tracking-icon" style="font-size: 0.8rem;"></i>
@@ -501,24 +507,7 @@
         <!-- マップ描画先 -->
         <div id="map"></div>
         
-        <!-- GPS測位ステータスインジケーター（フローティング） -->
-        <div id="gps-positioning-indicator" class="glass-panel d-flex align-items-center gap-2" style="
-          position: absolute;
-          top: 15px;
-          left: 50%;
-          transform: translateX(-50%);
-          z-index: 1000;
-          padding: 8px 16px;
-          border-radius: 20px;
-          box-shadow: 0 4px 16px rgba(15, 23, 42, 0.18);
-          font-size: 0.9rem;
-          font-weight: bold;
-          background: rgba(255, 255, 255, 0.95);
-          border: 2px solid var(--accent-warning);
-        ">
-          <span class="status-dot" style="width: 10px; height: 10px; border-radius: 50%; background-color: #92400e; box-shadow: 0 0 8px #92400e; animation: pulse 1.5s infinite; margin-right: 0; display: inline-block;"></span>
-          <span class="text-dark animate-pulse" id="gps-positioning-text">測位中...</span>
-        </div>
+
         
         <!-- マップ上のフローティング操作系 -->
         <div class="map-overlay-controls">
@@ -705,7 +694,7 @@
   <!-- Mapbox shp-write CDN -->
   <script src="https://unpkg.com/@mapbox/shp-write@latest/shpwrite.js"></script>
 
-  <!-- カスタムアプリケーションロジック (キャッシュバスター付き v1.2.0) -->
-  <script src="app.js?v=1.2.0"></script>
+  <!-- カスタムアプリケーションロジック (キャッシュバスター付き v1.2.1) -->
+  <script src="app.js?v=1.2.1"></script>
 </body>
 </html>

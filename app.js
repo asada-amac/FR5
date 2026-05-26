@@ -303,16 +303,13 @@ async function loadExistingTracksOnMap() {
 }
 
 // 常時GPS監視 (精度と現在地の表示用)
+// 常時GPS監視 (精度と現在地の表示用)
 function startGpsMonitoring() {
+  // 起動時の初期化状態（測位中）を設定
+  updateGpsStatus("positioning");
+
   if (!navigator.geolocation) {
-    updateGpsStatus(false, "GPS非対応端末");
-    const indicator = document.getElementById("gps-positioning-indicator");
-    if (indicator) {
-      indicator.style.display = "flex";
-      indicator.style.borderColor = "var(--accent-danger)";
-      const text = document.getElementById("gps-positioning-text");
-      if (text) text.innerText = "GPS非対応";
-    }
+    updateGpsStatus("error", "GPS非対応");
     return;
   }
 
@@ -331,7 +328,7 @@ function startGpsMonitoring() {
 
       latestCoords = { lat, lng, accuracy };
       
-      updateGpsStatus(true, `精度: ±${Math.round(accuracy)}m`);
+      updateGpsStatus("active", `誤差: ±${Math.round(accuracy)}m`);
       updateFormCoordinates();
 
       // マップの現在地マーク更新
@@ -342,43 +339,33 @@ function startGpsMonitoring() {
         map.setView([lat, lng], 17);
         hasInitialCenteringDone = true;
       }
-
-      // GPS測位完了によりインジケーターを非表示化
-      const indicator = document.getElementById("gps-positioning-indicator");
-      if (indicator) {
-        indicator.style.display = "none";
-      }
     },
     (error) => {
       console.warn("GPSエラー:", error.message);
-      updateGpsStatus(false, "位置取得失敗");
-
-      // GPSが失われた場合はインジケーターを再度表示
-      const indicator = document.getElementById("gps-positioning-indicator");
-      if (indicator) {
-        indicator.style.display = "flex";
-        indicator.style.borderColor = "var(--accent-warning)";
-        const text = document.getElementById("gps-positioning-text");
-        if (text) text.innerText = "測位中...";
-      }
+      updateGpsStatus("positioning"); // 測位できない時は「測位中...」に戻す
     },
     gpsOptions
   );
 }
 
-// GPSステータスUIの更新
-function updateGpsStatus(isActive, message) {
+// GPSステータスUIの更新 (三状態制御)
+function updateGpsStatus(state, message) {
   const dot = document.getElementById("gps-status-dot");
   const text = document.getElementById("gps-status-text");
+  if (!dot || !text) return;
 
-  if (isActive) {
+  if (state === "active") {
     dot.className = "status-dot active";
     text.innerText = message;
-    text.className = "text-light";
+    text.className = "text-light small fw-bold";
+  } else if (state === "positioning") {
+    dot.className = "status-dot positioning";
+    text.innerText = "測位中...";
+    text.className = "text-warning small fw-bold";
   } else {
     dot.className = "status-dot";
-    text.innerText = message;
-    text.className = "text-danger";
+    text.innerText = message || "測位失敗";
+    text.className = "text-danger small fw-bold";
   }
 }
 
