@@ -337,6 +337,26 @@ function initApp(username) {
     });
 }
 
+// 調査員名から一意のカラーコードを生成する (美しいHSLカラーベース)
+function getUserColor(username) {
+  if (!username) return "#a855f7"; // フォールバック
+  
+  // 文字列からハッシュ値を計算 (DJB2アルゴリズム)
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) {
+    hash = username.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // 色相 (0〜360) を決定
+  const hue = Math.abs(hash) % 360;
+  
+  // 彩度 (75〜90%)、明度 (45〜55%) で見やすい高コントラストな色にする
+  const saturation = 80 + (Math.abs(hash >> 8) % 15);
+  const lightness = 45 + (Math.abs(hash >> 16) % 10);
+  
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
+
 // ==========================================
 // 3. MAP & GPS FUNCTIONS
 // ==========================================
@@ -359,9 +379,12 @@ function initMap() {
     maxZoom: 18
   }).addTo(map);
 
+  const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+  const myColor = getUserColor(username);
+
   // 軌跡描画用のレイヤーを作成
   trackPolyline = L.polyline([], {
-    color: "#06b6d4", // シアン
+    color: myColor, // 自分の色を自動適用
     weight: 4,
     opacity: 0.85,
     dashArray: "1, 1", // 細かい点線/破線で美しい軌跡を演出
@@ -481,15 +504,18 @@ function updateGpsStatus(state, message) {
 function updateMapMarker(lat, lng, accuracy) {
   if (!map) return;
 
+  const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
+  const myColor = getUserColor(username);
+
   const myIcon = L.divIcon({
     className: 'custom-gps-icon',
     html: `<div style="
       width: 14px; 
       height: 14px; 
-      background: #00e5ff; 
+      background: ${myColor}; 
       border: 2px solid #ffffff; 
       border-radius: 50%;
-      box-shadow: 0 0 10px #00e5ff;"></div>`,
+      box-shadow: 0 0 10px ${myColor};"></div>`,
     iconSize: [14, 14],
     iconAnchor: [7, 7]
   });
@@ -507,8 +533,8 @@ function updateMapMarker(lat, lng, accuracy) {
   } else {
     currentPositionAccuracyCircle = L.circle([lat, lng], {
       radius: accuracy,
-      color: "#00e5ff",
-      fillColor: "#00e5ff",
+      color: myColor,
+      fillColor: myColor,
       fillOpacity: 0.1,
       weight: 1
     }).addTo(map);
@@ -566,7 +592,7 @@ function startTracking() {
   // 開始時の現在点を直ちに記録
   recordCurrentTrackPoint();
 
-  // Firebase リアルタイム位置情報の即時更新 & 10分ごとの定期更新タイマー開始
+  // Firebase リアルタイム位置情報の即時更新 & 1分ごとの定期更新タイマー開始
   const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
   updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
   realtimeLocationIntervalId = setInterval(() => {
@@ -574,7 +600,7 @@ function startTracking() {
     if (latestCoords.lat && latestCoords.lng) {
       updateRealtimeLocation(currentUsername, latestCoords.lat, latestCoords.lng);
     }
-  }, 10 * 60 * 1000); // 10分間隔
+  }, 60 * 1000); // 1分間隔に変更
 
   // 1分ごとに定期記録するインターバルをセット (60000 ms)
   trackingIntervalId = setInterval(() => {
@@ -615,6 +641,9 @@ async function checkAndRecordAsync(position) {
 
     lastRecordedTime = now;
     updateTrackUiAndMap();
+
+    // 1分ごとのバックグラウンド位置補完時にも即時アップロード
+    updateRealtimeLocation(username, lat, lng);
   }
 }
 
@@ -635,6 +664,9 @@ async function recordCurrentTrackPoint() {
 
     lastRecordedTime = now;
     updateTrackUiAndMap();
+
+    // 1分ごとの定期記録時にFirestoreに即時アップロード
+    updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
   }
 }
 
@@ -1152,12 +1184,16 @@ function listenToOtherUsers() {
         const updateTime = data.timestamp ? data.timestamp.toDate() : new Date();
         const diffMin = Math.round((now - updateTime) / 60000);
         const timeStr = diffMin <= 0 ? "現在" : `${diffMin}分前`;
+        const userColor = getUserColor(username);
 
         const userRow = document.createElement("div");
         userRow.className = "d-flex justify-content-between align-items-center py-1 border-bottom border-light";
         userRow.style.borderColor = "rgba(15, 23, 42, 0.05) !important";
         userRow.innerHTML = `
-          <span class="fw-bold text-dark text-truncate" style="max-width: 110px;" title="${username}">${username}</span>
+          <div class="d-flex align-items-center" style="min-width: 0;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: ${userColor}; margin-right: 6px; flex-shrink: 0;"></span>
+            <span class="fw-bold text-dark text-truncate" style="max-width: 110px;" title="${username}">${username}</span>
+          </div>
           <span class="text-secondary text-nowrap" style="font-size: 0.68rem;">${timeStr} (${data.lat.toFixed(4)}, ${data.lng.toFixed(4)})</span>
         `;
         listContainer.appendChild(userRow);
@@ -1175,9 +1211,9 @@ function listenToOtherUsers() {
           if (otherUsersPolylines[username]) {
             otherUsersPolylines[username].setLatLngs(latlngs);
           } else {
-            // 高コントラストな紫色の破線で美しい軌跡を表示
+            // 高コントラストな、調査員ごとの破線で軌跡を表示
             otherUsersPolylines[username] = L.polyline(latlngs, {
-              color: "#a855f7", // 紫色
+              color: userColor,
               weight: 3,
               opacity: 0.85,
               dashArray: "4, 6", // 美しい破線
@@ -1194,7 +1230,7 @@ function listenToOtherUsers() {
         if (map) {
           const popupContent = `
             <div style="font-size: 0.85rem; line-height: 1.4;">
-              <span class="badge mb-1 text-white" style="background-color: #a855f7; font-weight: 700;">他調査員 (リアルタイム)</span><br>
+              <span class="badge mb-1 text-white" style="background-color: ${userColor}; font-weight: 700;">他調査員 (リアルタイム)</span><br>
               <strong>調査者:</strong> ${username}<br>
               <strong>最新位置:</strong> ${data.lat.toFixed(6)}, ${data.lng.toFixed(6)}<br>
               <strong>記録点数:</strong> ${data.path ? data.path.length : 0} 点<br>
@@ -1207,17 +1243,16 @@ function listenToOtherUsers() {
             otherUsersMarkers[username].setLatLng([data.lat, data.lng]);
             otherUsersMarkers[username].setPopupContent(popupContent);
           } else {
-            // 新規ピン作成 (高コントラストで美しい紫色の円ピン)
-            const pinColor = "#a855f7";
+            // 新規ピン作成 (高コントラストで美しい、調査員ごとの円ピン)
             const otherIcon = L.divIcon({
               className: `custom-other-gps-${username.replace(/\s+/g, '_')}`,
               html: `<div style="
                 width: 16px; 
                 height: 16px; 
-                background: ${pinColor}; 
+                background: ${userColor}; 
                 border: 2px solid #ffffff; 
                 border-radius: 50%;
-                box-shadow: 0 0 10px ${pinColor};
+                box-shadow: 0 0 10px ${userColor};
                 display: flex;
                 justify-content: center;
                 align-items: center;
