@@ -36,6 +36,7 @@ let trackingIntervalId = null;
 let watchPositionId = null;
 let currentSessionId = null;
 let editCompressedPhotoBase64 = ""; // 編集中の写真Base64キャッシュ
+let lastRealtimeUploadTime = 0; // 他調査員用現在地アップロードのスロットリング用タイムスタンプ
 
 // Firebaseリアルタイム共有・GPSステータス用のグローバル変数
 let realtimeLocationIntervalId = null; // 10分ごとのFirestore更新タイマーID
@@ -308,6 +309,13 @@ function checkLogin() {
 
 // ログイン後のアプリ初期化
 function initApp(username) {
+  // セッションIDの復元 (リロード時のセッション継続対応)
+  const savedSessionId = sessionStorage.getItem("current_session_id");
+  if (savedSessionId) {
+    currentSessionId = savedSessionId;
+    console.log("セッションIDを復元しました:", currentSessionId);
+  }
+
   const badgeUsername = document.getElementById("badge-username");
   if (badgeUsername) {
     badgeUsername.innerText = username;
@@ -538,6 +546,17 @@ function updateMapMarker(lat, lng, accuracy) {
       fillOpacity: 0.1,
       weight: 1
     }).addTo(map);
+  }
+
+  // ログイン済みであれば、トラッキング中かどうかにかかわらず、現在地をリアルタイムにFirestoreへ共有！
+  // (これによって、トラック開始ボタンを押す前でもお互いの現在地ピンがマップ上に瞬時に表示されます)
+  // ただし高頻度の送信を防ぐため、前回のリアルタイム送信から少なくとも8秒以上経過している場合のみ実行
+  if (username && username !== "匿名調査員") {
+    const now = Date.now();
+    if (now - lastRealtimeUploadTime >= 8000) {
+      lastRealtimeUploadTime = now;
+      updateRealtimeLocation(username, lat, lng);
+    }
   }
 }
 
@@ -1124,7 +1143,11 @@ async function submitAllDataToGAS() {
 async function updateRealtimeLocation(username, lat, lng) {
   if (!lat || !lng) return;
   try {
-    const sessionId = currentSessionId || sessionStorage.getItem("current_session_id") || "no_session";
+    // メモリ上のセッションIDが空でもsessionStorageにあれば復元
+    if (!currentSessionId) {
+      currentSessionId = sessionStorage.getItem("current_session_id");
+    }
+    const sessionId = currentSessionId || "no_session";
     const docId = username;
 
     // IndexedDBから現在のセッションの軌跡データを取得してパス配列を作成
@@ -1140,7 +1163,7 @@ async function updateRealtimeLocation(username, lat, lng) {
       path: pathData // 軌跡配列をアップロード
     }, { merge: true });
 
-    console.log("リアルタイム位置・軌跡をFirestoreに更新しました:", docId, pathData.length, "点");
+    console.log(`リアルタイム位置・軌跡をFirestoreに更新: ${docId} (軌跡: ${pathData.length}点)`);
   } catch (error) {
     console.error("Firestoreへの位置・軌跡更新失敗:", error);
   }
@@ -1208,20 +1231,26 @@ function listenToOtherUsers() {
             latlngs.push([data.lat, data.lng]);
           }
 
-          if (otherUsersPolylines[username]) {
-            otherUsersPolylines[username].setLatLngs(latlngs);
-          } else {
-            // 高コントラストな、調査員ごとの破線で軌跡を表示
-            otherUsersPolylines[username] = L.polyline(latlngs, {
-              color: userColor,
-              weight: 3,
-              opacity: 0.85,
-              dashArray: "4, 6", // 美しい破線
-              lineJoin: "round"
-            });
-            
-            if (showOtherUsers) {
-              otherUsersPolylines[username].addTo(map);
+          if (latlngs.length >= 2) { // 2点以上で描画可能
+            if (otherUsersPolylines[username]) {
+              otherUsersPolylines[username].setLatLngs(latlngs);
+              // 万が一マップから外れていれば再追加する安全対策
+              if (showOtherUsers && !map.hasLayer(otherUsersPolylines[username])) {
+                otherUsersPolylines[username].addTo(map);
+              }
+            } else {
+              // 高コントラストな、調査員ごとの破線で軌跡を表示
+              otherUsersPolylines[username] = L.polyline(latlngs, {
+                color: userColor,
+                weight: 3,
+                opacity: 0.85,
+                dashArray: "4, 6", // 美しい破線
+                lineJoin: "round"
+              });
+              
+              if (showOtherUsers) {
+                otherUsersPolylines[username].addTo(map);
+              }
             }
           }
         }
@@ -1242,6 +1271,10 @@ function listenToOtherUsers() {
             // マップにピンがあれば移動させてポップアップを更新
             otherUsersMarkers[username].setLatLng([data.lat, data.lng]);
             otherUsersMarkers[username].setPopupContent(popupContent);
+            // 万が一マップから外れていれば再追加する安全対策
+            if (showOtherUsers && !map.hasLayer(otherUsersMarkers[username])) {
+              otherUsersMarkers[username].addTo(map);
+            }
           } else {
             // 新規ピン作成 (高コントラストで美しい、調査員ごとの円ピン)
             const otherIcon = L.divIcon({
