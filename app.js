@@ -334,8 +334,8 @@ function initApp(username) {
       console.log("Firebase 匿名ログイン成功: ", userCredential.user.uid);
       listenToOtherUsers();
       
-      // すでにトラッキングタイマーが動作中（リロード時など）なら直ちに初回位置更新を行う
-      if (trackingIntervalId && latestCoords.lat && latestCoords.lng) {
+      // ログイン成功時に最新の位置がすでに取得できていれば、即座にFirestoreに現在地を登録する (同期の高速化)
+      if (latestCoords.lat && latestCoords.lng) {
         updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
       }
     })
@@ -363,6 +363,29 @@ function getUserColor(username) {
   const lightness = 45 + (Math.abs(hash >> 16) % 10);
   
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
+
+// 緯度経度オブジェクト (プレーンまたはGeoPoint) から緯度と経度を安全に抽出する超堅牢な関数
+function parseCoordinate(obj) {
+  if (!obj) return null;
+  
+  let lat = null;
+  let lng = null;
+
+  // 1. latitude / longitude プロパティをチェック
+  if (typeof obj.latitude === "number") lat = obj.latitude;
+  else if (typeof obj.lat === "number") lat = obj.lat;
+  else if (obj.lat && typeof obj.lat.latitude === "number") lat = obj.lat.latitude; // 入れ子
+
+  // 2. longitude / lng プロパティをチェック
+  if (typeof obj.longitude === "number") lng = obj.longitude;
+  else if (typeof obj.lng === "number") lng = obj.lng;
+  else if (obj.lng && typeof obj.lng.longitude === "number") lng = obj.lng.longitude; // 入れ子
+
+  if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+    return [lat, lng];
+  }
+  return null;
 }
 
 // ==========================================
@@ -1189,9 +1212,10 @@ function listenToOtherUsers() {
 
   dbFirestore.collection("active_users").onSnapshot((snapshot) => {
     const listContainer = document.getElementById("active-users-list");
-    if (!listContainer) return;
+    if (listContainer) {
+      listContainer.innerHTML = "";
+    }
     
-    listContainer.innerHTML = "";
     let otherActiveCount = 0;
     const now = new Date();
 
@@ -1202,38 +1226,48 @@ function listenToOtherUsers() {
 
       try {
         const data = doc.data();
-        if (!data || typeof data.lat !== "number" || typeof data.lng !== "number" || isNaN(data.lat) || isNaN(data.lng)) {
-          return; // 不完全または壊れたドキュメントは安全にスキップ
+        if (!data) return;
+
+        // 緯度・経度の抽出 (超堅牢な parseCoordinate ヘルパーによるフォールバック対応)
+        const parsedDocCoords = parseCoordinate(data);
+        if (!parsedDocCoords) {
+          return; // 不完全または壊れた位置データは安全にスキップ
         }
+        const [lat, lng] = parsedDocCoords;
 
         otherActiveCount++;
 
-        // 1. パネルの接続中リストへ追加
-        const updateTime = data.timestamp ? data.timestamp.toDate() : new Date();
-        const diffMin = Math.round((now - updateTime) / 60000);
-        const timeStr = diffMin <= 0 ? "現在" : `${diffMin}分前`;
-        const userColor = getUserColor(username);
+        // 1. パネル of 接続中リストへ追加 (存在する場合のみ)
+        if (listContainer) {
+          const updateTime = data.timestamp ? data.timestamp.toDate() : new Date();
+          const diffMin = Math.round((now - updateTime) / 60000);
+          const timeStr = diffMin <= 0 ? "現在" : `${diffMin}分前`;
+          const userColor = getUserColor(username);
 
-        const userRow = document.createElement("div");
-        userRow.className = "d-flex justify-content-between align-items-center py-1 border-bottom border-light";
-        userRow.style.borderColor = "rgba(15, 23, 42, 0.05) !important";
-        userRow.innerHTML = `
-          <div class="d-flex align-items-center" style="min-width: 0;">
-            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: ${userColor}; margin-right: 6px; flex-shrink: 0;"></span>
-            <span class="fw-bold text-dark text-truncate" style="max-width: 110px;" title="${username}">${username}</span>
-          </div>
-          <span class="text-secondary text-nowrap" style="font-size: 0.68rem;">${timeStr} (${data.lat.toFixed(4)}, ${data.lng.toFixed(4)})</span>
-        `;
-        listContainer.appendChild(userRow);
+          const userRow = document.createElement("div");
+          userRow.className = "d-flex justify-content-between align-items-center py-1 border-bottom border-light";
+          userRow.style.borderColor = "rgba(15, 23, 42, 0.05) !important";
+          userRow.innerHTML = `
+            <div class="d-flex align-items-center" style="min-width: 0;">
+              <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: ${userColor}; margin-right: 6px; flex-shrink: 0;"></span>
+              <span class="fw-bold text-dark text-truncate" style="max-width: 110px;" title="${username}">${username}</span>
+            </div>
+            <span class="text-secondary text-nowrap" style="font-size: 0.68rem;">${timeStr} (${lat.toFixed(4)}, ${lng.toFixed(4)})</span>
+          `;
+          listContainer.appendChild(userRow);
+        }
 
         // 2. マップ上の軌跡（ライン）描画・更新
         if (map && data.path && Array.isArray(data.path)) {
-          const latlngs = data.path.map(p => [p.lat, p.lng]);
+          // 有効な座標のみを厳密に抽出して配列化
+          const latlngs = data.path
+            .map(p => parseCoordinate(p))
+            .filter(ll => ll !== null);
           
           // 最新座標をパスの末尾に補完して最新表示を担保
-          const existsInPath = latlngs.some(ll => Math.abs(ll[0] - data.lat) < 0.00001 && Math.abs(ll[1] - data.lng) < 0.00001);
+          const existsInPath = latlngs.some(ll => ll && Math.abs(ll[0] - lat) < 0.00001 && Math.abs(ll[1] - lng) < 0.00001);
           if (!existsInPath) {
-            latlngs.push([data.lat, data.lng]);
+            latlngs.push([lat, lng]);
           }
 
           if (latlngs.length >= 2) { // 2点以上で描画可能
@@ -1249,13 +1283,21 @@ function listenToOtherUsers() {
                 color: userColor,
                 weight: 3,
                 opacity: 0.85,
-                dashArray: "4, 6", // 美しい破線
+                dashArray: "4, 6",
                 lineJoin: "round"
               });
               
               if (showOtherUsers) {
                 otherUsersPolylines[username].addTo(map);
               }
+            }
+          } else {
+            // 軌跡が2点未満（リセットされた場合など）は古い軌跡ラインをマップから削除
+            if (otherUsersPolylines[username]) {
+              if (map) {
+                map.removeLayer(otherUsersPolylines[username]);
+              }
+              delete otherUsersPolylines[username];
             }
           }
         }
@@ -1266,7 +1308,7 @@ function listenToOtherUsers() {
             <div style="font-size: 0.85rem; line-height: 1.4;">
               <span class="badge mb-1 text-white" style="background-color: ${userColor}; font-weight: 700;">他調査員 (リアルタイム)</span><br>
               <strong>調査者:</strong> ${username}<br>
-              <strong>最新位置:</strong> ${data.lat.toFixed(6)}, ${data.lng.toFixed(6)}<br>
+              <strong>最新位置:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>
               <strong>記録点数:</strong> ${data.path ? data.path.length : 0} 点<br>
               <span class="small text-secondary">更新: ${updateTime.toLocaleTimeString()} (${timeStr})</span>
             </div>
@@ -1274,7 +1316,7 @@ function listenToOtherUsers() {
 
           if (otherUsersMarkers[username]) {
             // マップにピンがあれば移動させてポップアップを更新
-            otherUsersMarkers[username].setLatLng([data.lat, data.lng]);
+            otherUsersMarkers[username].setLatLng([lat, lng]);
             otherUsersMarkers[username].setPopupContent(popupContent);
             // 万が一マップから外れていれば再追加する安全対策
             if (showOtherUsers && !map.hasLayer(otherUsersMarkers[username])) {
@@ -1301,7 +1343,7 @@ function listenToOtherUsers() {
               iconAnchor: [8, 8]
             });
 
-            const marker = L.marker([data.lat, data.lng], { icon: otherIcon })
+            const marker = L.marker([lat, lng], { icon: otherIcon })
               .bindPopup(popupContent);
 
             // 瞬時に判別できるようホバーツールチップを追加
@@ -1345,7 +1387,7 @@ function listenToOtherUsers() {
     });
 
     // 他調査員の接続がない場合のフォールバック表示
-    if (otherActiveCount === 0) {
+    if (otherActiveCount === 0 && listContainer) {
       listContainer.innerHTML = `<div class="text-secondary small py-1 text-center">他調査員の接続なし</div>`;
     }
 
