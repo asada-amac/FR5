@@ -1237,13 +1237,14 @@ function listenToOtherUsers() {
 
         otherActiveCount++;
 
+        // 共通で使う時間・カラー変数をここで定義 (ReferenceErrorの解消)
+        const updateTime = data.timestamp ? data.timestamp.toDate() : new Date();
+        const diffMin = Math.round((now - updateTime) / 60000);
+        const timeStr = diffMin <= 0 ? "現在" : `${diffMin}分前`;
+        const userColor = getUserColor(username);
+
         // 1. パネル of 接続中リストへ追加 (存在する場合のみ)
         if (listContainer) {
-          const updateTime = data.timestamp ? data.timestamp.toDate() : new Date();
-          const diffMin = Math.round((now - updateTime) / 60000);
-          const timeStr = diffMin <= 0 ? "現在" : `${diffMin}分前`;
-          const userColor = getUserColor(username);
-
           const userRow = document.createElement("div");
           userRow.className = "d-flex justify-content-between align-items-center py-1 border-bottom border-light";
           userRow.style.borderColor = "rgba(15, 23, 42, 0.05) !important";
