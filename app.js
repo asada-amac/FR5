@@ -334,9 +334,9 @@ function initApp(username) {
       console.log("Firebase 匿名ログイン成功: ", userCredential.user.uid);
       listenToOtherUsers();
       
-      // ログイン成功時に最新の位置がすでに取得できていれば、即座にFirestoreに現在地を登録する (同期の高速化)
+      // ログイン成功時に最新の位置がすでに取得できていれば、即座にFirestoreに現在地を登録する (同期の高速化、force = true)
       if (latestCoords.lat && latestCoords.lng) {
-        updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
+        updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng, true);
       }
     })
     .catch((error) => {
@@ -573,11 +573,10 @@ function updateMapMarker(lat, lng, accuracy) {
 
   // ログイン済みであれば、トラッキング中かどうかにかかわらず、現在地をリアルタイムにFirestoreへ共有！
   // (これによって、トラック開始ボタンを押す前でもお互いの現在地ピンがマップ上に瞬時に表示されます)
-  // ただし高頻度の送信を防ぐため、前回のリアルタイム送信から少なくとも8秒以上経過している場合のみ実行
+  // 電池消耗を防ぐため、前回のリアルタイム送信から少なくとも10分(600,000ms)以上経過している場合のみ実行
   if (username && username !== "匿名調査員") {
     const now = Date.now();
-    if (now - lastRealtimeUploadTime >= 8000) {
-      lastRealtimeUploadTime = now;
+    if (now - lastRealtimeUploadTime >= 600000) {
       updateRealtimeLocation(username, lat, lng);
     }
   }
@@ -634,15 +633,15 @@ function startTracking() {
   // 開始時の現在点を直ちに記録
   recordCurrentTrackPoint();
 
-  // Firebase リアルタイム位置情報の即時更新 & 1分ごとの定期更新タイマー開始
+  // Firebase リアルタイム位置情報の即時更新 (開始時は force = true で即時登録) & 10分ごとの定期更新タイマー開始 (電池節約)
   const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
-  updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng);
+  updateRealtimeLocation(username, latestCoords.lat, latestCoords.lng, true);
   realtimeLocationIntervalId = setInterval(() => {
     const currentUsername = sessionStorage.getItem("surveyor_name") || "匿名調査員";
     if (latestCoords.lat && latestCoords.lng) {
-      updateRealtimeLocation(currentUsername, latestCoords.lat, latestCoords.lng);
+      updateRealtimeLocation(currentUsername, latestCoords.lat, latestCoords.lng, true); // 定期送信なので force = true
     }
-  }, 60 * 1000); // 1分間隔に変更
+  }, 10 * 60 * 1000); // 10分間隔に変更
 
   // 1分ごとに定期記録するインターバルをセット (60000 ms)
   trackingIntervalId = setInterval(() => {
@@ -1162,9 +1161,16 @@ async function submitAllDataToGAS() {
 // 8. FIREBASE REALTIME SHARING FUNCTIONS
 // ==========================================
 
-// 自身の位置・軌跡情報をFirestoreに保存/上書きする
-async function updateRealtimeLocation(username, lat, lng) {
+// 自身の位置・軌跡情報をFirestoreに保存/上書きする (スロットリング制御付き: 基本10分に1回)
+async function updateRealtimeLocation(username, lat, lng, force = false) {
   if (!lat || !lng) return;
+  
+  const now = Date.now();
+  // force が false の場合、前回のアップロードから 10分 (600,000ms) 未満なら送信をスキップして電池消耗を防ぐ
+  if (!force && (now - lastRealtimeUploadTime < 600000)) {
+    return;
+  }
+
   try {
     // メモリ上のセッションIDが空でもsessionStorageにあれば復元
     if (!currentSessionId) {
@@ -1186,6 +1192,7 @@ async function updateRealtimeLocation(username, lat, lng) {
       path: pathData // 軌跡配列をアップロード
     }, { merge: true });
 
+    lastRealtimeUploadTime = now; // 実際の送信成功タイムスタンプを記録
     console.log(`リアルタイム位置・軌跡をFirestoreに更新: ${docId} (軌跡: ${pathData.length}点)`);
   } catch (error) {
     console.error("Firestoreへの位置・軌跡更新失敗:", error);
