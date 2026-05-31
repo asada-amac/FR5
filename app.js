@@ -1320,6 +1320,8 @@ function listenToOtherUsers() {
             }
           }
         }
+      } catch (err) {
+        console.error(`調査員 ${username} の描画ループ内個別例外:`, err);
       }
     });
 
