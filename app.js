@@ -1196,11 +1196,16 @@ function listenToOtherUsers() {
     const now = new Date();
 
     snapshot.forEach((doc) => {
-      const data = doc.data();
       const username = doc.id;
-
       // 自分以外のユーザーのみ処理対象とする
-      if (username !== currentUsername && data.lat && data.lng) {
+      if (username === currentUsername) return;
+
+      try {
+        const data = doc.data();
+        if (!data || typeof data.lat !== "number" || typeof data.lng !== "number" || isNaN(data.lat) || isNaN(data.lng)) {
+          return; // 不完全または壊れたドキュメントは安全にスキップ
+        }
+
         otherActiveCount++;
 
         // 1. パネルの接続中リストへ追加
