@@ -38,6 +38,18 @@ let currentSessionId = null;
 let editCompressedPhotoBase64 = ""; // 編集中の写真Base64キャッシュ
 let lastRealtimeUploadTime = 0; // 他調査員用現在地アップロードのスロットリング用タイムスタンプ
 
+// バックグラウンド動作維持用のグローバル変数 (Screen Wake Lock & Audio Background Loop)
+let wakeLock = null;
+const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA");
+silentAudio.loop = true;
+
+// 画面がフォアグラウンドに戻った際に Wake Lock を自動的に再取得
+document.addEventListener('visibilitychange', async () => {
+  if (trackingIntervalId && wakeLock === null && document.visibilityState === 'visible') {
+    await requestWakeLock();
+  }
+});
+
 // Firebaseリアルタイム共有・GPSステータス用のグローバル変数
 let realtimeLocationIntervalId = null; // 10分ごとのFirestore更新タイマーID
 let otherUsersMarkers = {};            // 他の調査員のマーカー管理 (username -> L.marker)
@@ -388,6 +400,42 @@ function parseCoordinate(obj) {
   return null;
 }
 
+// Screen Wake Lock API の要求 (自動消灯防止)
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      console.log('Wake Lock 有効化成功');
+      const bgStatusEl = document.getElementById("config-background-status");
+      if (bgStatusEl) {
+        bgStatusEl.innerText = "稼働中 (画面維持)";
+        bgStatusEl.className = "text-success fw-bold ms-1";
+      }
+    }
+  } catch (err) {
+    console.warn(`Wake Lock 要求失敗: ${err.name}, ${err.message}`);
+    const bgStatusEl = document.getElementById("config-background-status");
+    if (bgStatusEl) {
+      bgStatusEl.innerText = "制限中 (画面消灯可)";
+      bgStatusEl.className = "text-warning fw-bold ms-1";
+    }
+  }
+}
+
+// Screen Wake Lock API の解除 (スリープ制限の解除)
+function releaseWakeLock() {
+  if (wakeLock !== null) {
+    wakeLock.release();
+    wakeLock = null;
+    console.log('Wake Lock 解除');
+    const bgStatusEl = document.getElementById("config-background-status");
+    if (bgStatusEl) {
+      bgStatusEl.innerText = "停止中";
+      bgStatusEl.className = "text-secondary fw-bold ms-1";
+    }
+  }
+}
+
 // ==========================================
 // 3. MAP & GPS FUNCTIONS
 // ==========================================
@@ -630,6 +678,23 @@ function startTracking() {
     if (textStr) textStr.innerText = "トラック中";
   }
 
+  // 1. バックグラウンド動作維持用の無音オーディオ再生を開始 (メディア再生によるOSサスペンド防止)
+  silentAudio.play()
+    .then(() => {
+      console.log("無音オーディオバックグラウンドループ開始成功");
+      const bgStatusEl = document.getElementById("config-background-status");
+      if (bgStatusEl) {
+        bgStatusEl.innerText = "稼働中 (バックグラウンド維持)";
+        bgStatusEl.className = "text-success fw-bold ms-1";
+      }
+    })
+    .catch(err => {
+      console.warn("無音オーディオ再生失敗:", err);
+    });
+
+  // 2. 画面の消灯防止 (Wake Lock) を要求
+  requestWakeLock();
+
   // 開始時の現在点を直ちに記録
   recordCurrentTrackPoint();
 
@@ -727,6 +792,13 @@ async function updateTrackUiAndMap() {
 
 // トラッキングの一時停止
 async function stopTracking() {
+  // 1. バックグラウンド用無音オーディオ再生を停止
+  silentAudio.pause();
+  silentAudio.currentTime = 0;
+  
+  // 2. 画面スリープ制限 (Wake Lock) を解除
+  releaseWakeLock();
+
   if (trackingIntervalId) {
     clearInterval(trackingIntervalId);
     trackingIntervalId = null;
