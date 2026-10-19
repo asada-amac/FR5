@@ -7,6 +7,8 @@
       "**/node_modules/**",
       "FR5Android/**",
       "report_fr5_pipeline/**",
+      "FR5_v1.6.2.apk",
+      "chiba_agri.geojson",
       "*.ai",
       "*.qmd",
       "*.gs"
