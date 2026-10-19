@@ -1,0 +1,15 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "FR5Android/**",
+      "report_fr5_pipeline/**",
+      "*.ai",
+      "*.qmd",
+      "*.gs"
+    ]
+  }
+}
