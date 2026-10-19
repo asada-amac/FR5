@@ -33,6 +33,7 @@
       padding: 0;
       width: 100vw;
       height: 100vh;
+      height: 100dvh; /* モバイルブラウザのアドレスバー高さを考慮した動的ビューポート高 */
       overflow: hidden;
       font-family: 'Outfit', 'Noto Sans JP', sans-serif;
       background: var(--bg-gradient);
@@ -171,7 +172,7 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 70px; /* やや高さを拡大 */
+      height: calc(32px + env(safe-area-inset-bottom) + 4px); /* ◀ ● ■ との重なりを防ぎつつ、極小アイコン表示にスリム化 */
       background: rgba(255, 255, 255, 0.98); /* 白ベース */
       backdrop-filter: blur(20px);
       border-top: 2px solid var(--glass-border);
@@ -179,7 +180,7 @@
       justify-content: space-around;
       align-items: center;
       z-index: 1030;
-      padding-bottom: env(safe-area-inset-bottom);
+      padding-bottom: calc(env(safe-area-inset-bottom) + 4px); /* ◀ ● ■ との重なりを防ぎつつ、極小アイコン表示にスリム化 */
       box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
     }
 
@@ -192,15 +193,16 @@
       background: none;
       border: none;
       color: var(--text-muted);
-      font-size: 0.85rem; /* サイズ拡大 */
-      font-weight: 600; /* 太字 */
-      padding: 8px 0;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0;
+      height: 32px;
       transition: all 0.2s;
     }
 
     .nav-item-btn i {
       font-size: 1.5rem; /* アイコンサイズ拡大 */
-      margin-bottom: 5px;
+      margin-top: 1px;
       transition: all 0.2s;
     }
 
@@ -665,7 +667,7 @@
             <strong>ログインユーザー:</strong> <span class="text-primary fw-bold ms-1" id="config-username">---</span>
           </div>
           <div class="small text-dark mb-2">
-            <strong>アプリバージョン:</strong> <span class="text-primary fw-bold ms-1">v1.4.0</span>
+            <strong>アプリバージョン:</strong> <span class="text-primary fw-bold ms-1">v1.6.3</span>
           </div>
           <div class="small text-dark mb-2">
             <strong>バックグラウンド維持:</strong> <span class="text-secondary fw-bold ms-1" id="config-background-status">待機中</span>
@@ -688,19 +690,16 @@
 
   </main>
 
-  <!-- ボトムタブナビゲーション -->
+  <!-- ボトムタブナビゲーション (アイコンのみ) -->
   <nav class="bottom-nav">
     <button class="nav-item-btn active" data-tab="tab-map">
       <i class="fa-solid fa-map"></i>
-      <span>調査マップ</span>
     </button>
     <button class="nav-item-btn" data-tab="tab-form">
       <i class="fa-solid fa-circle-plus"></i>
-      <span>新規調査</span>
     </button>
     <button class="nav-item-btn position-relative" data-tab="tab-data">
       <i class="fa-solid fa-square-poll-horizontal"></i>
-      <span>データ管理</span>
       <span class="badge-count" id="badge-survey-count">0</span>
     </button>
   </nav>
@@ -854,7 +853,7 @@
     </div>
   </div>
 
-  <!-- カスタムアプリケーションロジック (キャッシュバスター付き v1.4.0) -->
-  <script src="app.js?v=1.4.0"></script>
+  <!-- カスタムアプリケーションロジック (キャッシュバスター付き v1.6.3) -->
+  <script src="app.js?v=1.6.3"></script>
 </body>
 </html>

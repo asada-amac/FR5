@@ -1,0 +1,8 @@
+[general]
+name=FR5 現地調査報告書パイプライン (AMAC標準)
+qgisMinimumVersion=3.16
+description=project_FR5 のスプレッドシート・Googleドライブ・chiba_agri.geojsonを同期し、調査結果図の自動作図からGemini APIによるAMAC形式Word報告書作成までを5段階のボタンで実行するプラグイン
+version=1.0.0
+author=AMAC LLC
+email=info@amac.co.jp
+category=Plugins

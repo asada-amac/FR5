@@ -439,24 +439,347 @@ function releaseWakeLock() {
 // ==========================================
 // 3. MAP & GPS FUNCTIONS
 // ==========================================
+// ==========================================
+// CUSTOM OFFLINE CACHE TILE LAYER & CONTROL
+// ==========================================
+L.TileLayer.OfflineCache = L.TileLayer.extend({
+  createTile: function(coords, done) {
+    const tile = document.createElement('img');
+    const url = this.getTileUrl(coords);
+    const cacheName = 'gsi-tile-cache';
+    
+    L.DomEvent.on(tile, 'load', L.Util.bind(this._tileOnLoad, this, done, tile));
+    L.DomEvent.on(tile, 'error', L.Util.bind(this._tileOnError, this, done, tile));
+    
+    if (window.caches) {
+      window.caches.open(cacheName).then(cache => {
+        cache.match(url).then(response => {
+          if (response) {
+            response.blob().then(blob => {
+              const objectURL = URL.createObjectURL(blob);
+              tile.addEventListener('load', () => URL.revokeObjectURL(objectURL), { once: true });
+              tile.addEventListener('error', () => URL.revokeObjectURL(objectURL), { once: true });
+              tile.src = objectURL;
+            }).catch(err => {
+              console.warn("Blob conversion error, falling back to network:", err);
+              tile.src = url;
+            });
+          } else {
+            if (navigator.onLine === false) {
+              tile.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+              setTimeout(() => done(null, tile), 0);
+              return;
+            }
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
+            fetch(url, { signal: controller.signal })
+              .then(res => {
+                clearTimeout(timeoutId);
+                if (res.ok) {
+                  const resClone = res.clone();
+                  cache.put(url, resClone);
+                  return res.blob();
+                }
+                throw new Error("Tile fetch failed");
+              })
+              .then(blob => {
+                const objectURL = URL.createObjectURL(blob);
+                tile.addEventListener('load', () => URL.revokeObjectURL(objectURL), { once: true });
+                tile.addEventListener('error', () => URL.revokeObjectURL(objectURL), { once: true });
+                tile.src = objectURL;
+              })
+              .catch(err => {
+                clearTimeout(timeoutId);
+                if (err.name === 'AbortError') {
+                  console.warn("Tile fetch aborted (timeout):", url);
+                }
+                tile.src = url;
+              });
+          }
+        });
+      }).catch(err => {
+        console.error("Cache open error:", err);
+        tile.src = url;
+      });
+    } else {
+      tile.src = url;
+    }
+    
+    return tile;
+  }
+});
+
+L.tileLayer.offlineCache = function(url, options) {
+  return new L.TileLayer.OfflineCache(url, options);
+};
+
+L.Control.MapCache = L.Control.extend({
+  options: {
+    position: 'topleft'
+  },
+  
+  onAdd: function(map) {
+    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+    const button = L.DomUtil.create('a', '', container);
+    button.href = '#';
+    button.title = '現在の表示エリアの地図を事前保存';
+    button.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i>';
+    button.style.fontSize = '1.3rem';
+    button.style.display = 'flex';
+    button.style.alignItems = 'center';
+    button.style.justifyContent = 'center';
+    button.style.cursor = 'pointer';
+    
+    L.DomEvent.disableClickPropagation(container);
+    
+    const mapParent = map.getContainer();
+    const card = L.DomUtil.create('div', 'glass-panel p-3', mapParent);
+    card.style.position = 'absolute';
+    card.style.top = '15px';
+    card.style.left = '70px';
+    card.style.zIndex = '1000';
+    card.style.width = '280px';
+    card.style.display = 'none';
+    card.style.boxShadow = '0 10px 30px rgba(15, 23, 42, 0.2)';
+    card.style.border = '2px solid var(--glass-border)';
+    card.style.background = '#ffffff';
+    card.style.borderRadius = '12px';
+    
+    card.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="m-0 fw-bold text-primary"><i class="fa-solid fa-cloud-arrow-down me-1"></i>オフライン地図保存</h6>
+        <button type="button" class="btn-close btn-close-sm" style="font-size: 0.8rem; border: none; background: transparent;"></button>
+      </div>
+      <p class="text-secondary small mb-3" style="font-size: 0.82rem; line-height: 1.35; color: #64748b !important;">
+        現在表示されている範囲の地図を保存（キャッシュ）します。調査エリアを画面内に収め、拡大してから実行してください。
+      </p>
+      <div class="mb-2 small text-dark">
+        <strong>保存ズームレベル:</strong> <span id="cache-zoom-range">15 〜 18</span><br>
+        <strong>予想タイル数:</strong> <span class="fw-bold" id="cache-tile-count">計算中...</span>
+      </div>
+      <div id="cache-progress-container" style="display: none;" class="mb-3">
+        <div class="progress" style="height: 12px; border-radius: 6px; overflow: hidden; background: #e2e8f0;">
+          <div id="cache-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%; height: 100%;"></div>
+        </div>
+        <div class="text-center small mt-1 text-secondary" id="cache-progress-text" style="font-size: 0.78rem;">0 / 0 タイル (0%)</div>
+      </div>
+      <button class="btn btn-sm btn-gradient-primary w-100 py-2" id="btn-start-cache-download" style="font-size: 0.9rem; font-weight: 700;">ダウンロード開始</button>
+    `;
+    
+    const closeBtn = card.querySelector('.btn-close');
+    const startBtn = card.querySelector('#btn-start-cache-download');
+    const tileCountSpan = card.querySelector('#cache-tile-count');
+    const zoomRangeSpan = card.querySelector('#cache-zoom-range');
+    const progressContainer = card.querySelector('#cache-progress-container');
+    const progressBar = card.querySelector('#cache-progress-bar');
+    const progressText = card.querySelector('#cache-progress-text');
+    
+    let isDownloading = false;
+    let abortController = null;
+    
+    L.DomEvent.on(button, 'click', function(e) {
+      L.DomEvent.preventDefault(e);
+      if (card.style.display === 'none') {
+        card.style.display = 'block';
+        updateTileEstimate();
+      } else {
+        closeCard();
+      }
+    });
+    
+    L.DomEvent.on(closeBtn, 'click', closeCard);
+    
+    function closeCard() {
+      if (isDownloading) {
+        if (confirm("ダウンロードを中止しますか？")) {
+          if (abortController) abortController.abort();
+          resetUI();
+          card.style.display = 'none';
+        }
+      } else {
+        card.style.display = 'none';
+      }
+    }
+    
+    function resetUI() {
+      isDownloading = false;
+      progressContainer.style.display = 'none';
+      progressBar.style.width = '0%';
+      progressText.innerText = '0 / 0 タイル (0%)';
+      startBtn.disabled = false;
+      startBtn.innerText = 'ダウンロード開始';
+      startBtn.className = 'btn btn-sm btn-gradient-primary w-100 py-2';
+    }
+    
+    function lng2tile(lon, zoom) {
+      return Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+    }
+    function lat2tile(lat, zoom) {
+      return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+    }
+    
+    function getTilesList() {
+      const bounds = map.getBounds();
+      const currentZoom = Math.max(12, Math.round(map.getZoom()));
+      const minZoom = currentZoom;
+      const maxZoom = Math.min(18, currentZoom + 3);
+      
+      zoomRangeSpan.innerText = `${minZoom} 〜 ${maxZoom}`;
+      
+      const tiles = [];
+      for (let z = minZoom; z <= maxZoom; z++) {
+        const north = bounds.getNorth();
+        const south = bounds.getSouth();
+        const west = bounds.getWest();
+        const east = bounds.getEast();
+        
+        const xMin = lng2tile(west, z);
+        const xMax = lng2tile(east, z);
+        const yMin = lat2tile(north, z);
+        const yMax = lat2tile(south, z);
+        
+        for (let x = xMin; x <= xMax; x++) {
+          for (let y = yMin; y <= yMax; y++) {
+            tiles.push({ x: x, y: y, z: z });
+          }
+        }
+      }
+      return tiles;
+    }
+    
+    function updateTileEstimate() {
+      if (isDownloading) return;
+      const tiles = getTilesList();
+      tileCountSpan.innerText = `${tiles.length} タイル`;
+      if (tiles.length > 1000) {
+        tileCountSpan.className = 'fw-bold text-danger';
+        tileCountSpan.innerText += ' (多すぎます)';
+        startBtn.disabled = true;
+        startBtn.innerText = '地図を拡大してください';
+      } else {
+        tileCountSpan.className = 'fw-bold text-success';
+        startBtn.disabled = false;
+        startBtn.innerText = 'ダウンロード開始';
+      }
+    }
+    
+    map.on('moveend', updateTileEstimate);
+    
+    L.DomEvent.on(startBtn, 'click', async function() {
+      if (isDownloading) return;
+      
+      const tiles = getTilesList();
+      if (tiles.length === 0) return;
+      
+      isDownloading = true;
+      startBtn.disabled = true;
+      startBtn.innerText = 'ダウンロード中...';
+      startBtn.className = 'btn btn-sm btn-secondary w-100 py-2';
+      progressContainer.style.display = 'block';
+      
+      abortController = new AbortController();
+      const signal = abortController.signal;
+      
+      const cacheName = 'gsi-tile-cache';
+      let loadedCount = 0;
+      const totalCount = tiles.length;
+      const pool = [];
+      const limit = 5;
+      
+      try {
+        const cache = await window.caches.open(cacheName);
+        
+        for (let i = 0; i < tiles.length; i++) {
+          if (signal.aborted) break;
+          
+          const tile = tiles[i];
+          const url = `https://cyberjapandata.gsi.go.jp/xyz/std/${tile.z}/${tile.x}/${tile.y}.png`;
+          
+          const promise = (async () => {
+            const matched = await cache.match(url);
+            if (!matched) {
+              try {
+                const response = await fetch(url, { signal });
+                if (response.ok) {
+                  await cache.put(url, response);
+                }
+              } catch (e) {
+                console.warn("Failed to pre-download tile:", url, e);
+              }
+            }
+            
+            loadedCount++;
+            const pct = Math.round((loadedCount / totalCount) * 100);
+            progressBar.style.width = `${pct}%`;
+            progressText.innerText = `${loadedCount} / ${totalCount} タイル (${pct}%)`;
+          })();
+          
+          pool.push(promise);
+          
+          if (pool.length >= limit) {
+            await Promise.race(pool);
+            for (let j = pool.length - 1; j >= 0; j--) {
+              // Remove resolved promises from tracking list
+            }
+            pool.splice(0, pool.length - limit + 1);
+          }
+        }
+        
+        await Promise.all(pool);
+        
+        if (!signal.aborted) {
+          progressBar.style.width = '100%';
+          progressText.innerText = `完了! ${totalCount} タイル保存完了`;
+          startBtn.className = 'btn btn-sm btn-success w-100 py-2';
+          startBtn.innerText = '保存完了';
+          setTimeout(() => {
+            resetUI();
+            card.style.display = 'none';
+          }, 2000);
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          console.log("Pre-download aborted by user.");
+        } else {
+          console.error("Cache download error:", err);
+          alert("地図の事前保存中にエラーが発生しました。");
+          resetUI();
+        }
+      }
+    });
+    
+    return container;
+  }
+});
+
+L.control.mapCache = function(options) {
+  return new L.Control.MapCache(options);
+};
+
 function initMap() {
   if (map) return;
 
-  // デフォルト位置 (日本中心) でマップ作成
+  // デフォルト位置 (日本中心) でマップ作成 (Canvas描画を有効化して高速化)
   map = L.map("map", {
     zoomControl: false,
-    maxZoom: 19
+    maxZoom: 19,
+    preferCanvas: true
   }).setView([35.681236, 139.767125], 13);
 
   // L.control.zoomを右上等に配置
   L.control.zoom({ position: 'topleft' }).addTo(map);
 
-  // 国土地理院 標準地図タイル
-  L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
+  // 国土地理院 標準地図タイル (キャッシュ対応のカスタムレイヤーを使用)
+  L.tileLayer.offlineCache("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
     attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>',
     minZoom: 2,
     maxZoom: 18
   }).addTo(map);
+
+  // 事前ダウンロード用のカスタムコントロールを追加
+  L.control.mapCache({ position: 'topleft' }).addTo(map);
 
   const username = sessionStorage.getItem("surveyor_name") || "匿名調査員";
   const myColor = getUserColor(username);
@@ -943,7 +1266,10 @@ async function handleSurveySubmit(e) {
   
   // 日時の自動生成
   const now = new Date();
-  const surveyDate = now.toISOString().split("T")[0]; // YYYY-MM-DD
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const surveyDate = `${yyyy}-${mm}-${dd}`; // YYYY-MM-DD (ローカル日時基準)
   const surveyTime = now.toTimeString().split(" ")[0]; // HH:MM:SS
   const surveyId = crypto.randomUUID();
 
@@ -1071,6 +1397,39 @@ function blobToBase64(blob) {
   });
 }
 
+async function postToGASWebWithRetry(payload, loadingTextEl, baseLabel, maxRetries = 2, timeoutMs = 30000) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      if (attempt > 0 && loadingTextEl) {
+        loadingTextEl.innerText = `${baseLabel} (再試行 ${attempt}/${maxRetries})...`;
+        await new Promise(res => setTimeout(res, 1500 * attempt));
+      }
+      const response = await fetch(GAS_URL, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      const result = await response.json();
+      if (result.status !== "success") {
+        throw new Error(result.message || "サーバー側で書き込みエラーが発生しました。");
+      }
+      return result;
+    } catch (err) {
+      clearTimeout(timer);
+      lastError = err.name === "AbortError"
+        ? new Error("通信がタイムアウトしました（電波が弱い可能性があります）")
+        : err;
+    }
+  }
+  throw lastError;
+}
+
 async function submitAllDataToGAS() {
   const surveyCount = await db.surveys.count();
   const trackCount = await db.tracks.count();
@@ -1085,147 +1444,116 @@ async function submitAllDataToGAS() {
     return;
   }
 
-  if (!confirm(`端末内に保存されている調査データ ${surveyCount} 件と軌跡データ ${trackCount} 点をパッケージしてGoogleクラウドへ送信しますか？`)) {
+  if (!confirm(`端末内に保存されている調査データ ${surveyCount} 件と軌跡データ ${trackCount} 点をGoogleクラウドへ順次送信しますか？\n（1件送信に成功するごとに端末から削除され、途中で電波が切れても残りのデータは保持されます）`)) {
     return;
   }
 
-  // ローディングオーバーレイの表示
   const loadingOverlay = document.getElementById("loading-overlay");
   const loadingText = document.getElementById("loading-text");
-  
   loadingOverlay.style.display = "flex";
-  loadingText.innerText = "データを抽出してパッケージ中...";
 
-  // データの取り出し
   const surveys = await db.surveys.toArray();
   const tracks = await db.tracks.orderBy("timestamp").toArray();
 
-  let trackZipBase64 = "";
+  let surveySuccessCount = 0;
   let trackZipName = "";
 
-  // トラック軌跡データが存在する場合、ブラウザ側でSHP (ZIP) ファイルを自動生成
-  if (tracks.length > 0) {
-    loadingText.innerText = "軌跡データをGIS (SHP) 形式にブラウザ内で高速変換中...";
+  try {
+    // 1. 調査データを1件ずつ順次送信し、成功ごとにIndexedDBから削除
+    for (let i = 0; i < surveys.length; i++) {
+      const label = `調査データを送信中... (${i + 1} / ${surveys.length} 件)`;
+      loadingText.innerText = label;
 
-    // 1. トラックデータをGeoJSON LineStringにコンバート
-    const coordinates = tracks.map(t => [t.lng, t.lat]);
-    const geojson = {
-      type: "FeatureCollection",
-      features: []
-    };
+      const payload = {
+        surveys: [surveys[i]],
+        trackZip: "",
+        trackZipName: ""
+      };
 
-    const startTime = new Date(tracks[0].timestamp);
-    const yyyy = startTime.getFullYear();
-    const mm = String(startTime.getMonth() + 1).padStart(2, '0');
-    const dd = String(startTime.getDate()).padStart(2, '0');
-    const hh = String(startTime.getHours()).padStart(2, '0');
-    const min = String(startTime.getMinutes()).padStart(2, '0');
-    
-    const yyyymmdd = `${yyyy}${mm}${dd}`;
-    const hhmm = `${hh}${min}`;
-    const username = tracks[0].username || "匿名調査員";
-    const cleanUsername = username.replace(/[\\/:*?"<>|]/g, "_");
-    trackZipName = `${yyyymmdd}_${hhmm}_${cleanUsername}_line.zip`;
-
-    if (coordinates.length === 1) {
-      geojson.features.push({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: coordinates[0]
-        },
-        properties: {
-          id: tracks[0].sessionId || "single_point",
-          surveyor: username,
-          time: startTime.toISOString()
-        }
-      });
-    } else {
-      geojson.features.push({
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: coordinates
-        },
-        properties: {
-          id: tracks[0].sessionId || "track_line",
-          surveyor: username,
-          start: startTime.toISOString(),
-          end: new Date(tracks[tracks.length - 1].timestamp).toISOString()
-        }
-      });
+      await postToGASWebWithRetry(payload, loadingText, label);
+      await db.surveys.delete(surveys[i].id);
+      surveySuccessCount++;
+      await initDBStats();
     }
 
-    const baseFileName = trackZipName.replace(".zip", "");
-    const zipBlob = await shpwrite.zip(geojson, {
-      compression: "STORE",
-      outputType: "blob",
-      filename: baseFileName,
-      file: baseFileName,
-      types: {
-        // 大文字小文字や複数形のブレを完璧に網羅して上書きを強制適用
-        line: baseFileName,
-        Line: baseFileName,
-        polyline: baseFileName,
-        Polyline: baseFileName,
-        linestring: baseFileName,
-        LineString: baseFileName,
-        point: baseFileName,
-        Point: baseFileName,
-        points: baseFileName,
-        Points: baseFileName
+    // 2. トラックデータの送信
+    if (tracks.length > 0) {
+      loadingText.innerText = "軌跡データをGeoJSON形式に変換中...";
+
+      const coordinates = tracks.map(t => [t.lng, t.lat]);
+      const geojson = {
+        type: "FeatureCollection",
+        features: []
+      };
+
+      const startTime = new Date(tracks[0].timestamp);
+      const yyyy = startTime.getFullYear();
+      const mm = String(startTime.getMonth() + 1).padStart(2, '0');
+      const dd = String(startTime.getDate()).padStart(2, '0');
+      const hh = String(startTime.getHours()).padStart(2, '0');
+      const min = String(startTime.getMinutes()).padStart(2, '0');
+
+      const yyyymmdd = `${yyyy}${mm}${dd}`;
+      const hhmm = `${hh}${min}`;
+      const username = tracks[0].username || "匿名調査員";
+      const cleanUsername = username.replace(/[\\/:*?"<>|]/g, "_");
+      trackZipName = `${yyyymmdd}_${hhmm}_${cleanUsername}_line.geojson`;
+
+      if (coordinates.length === 1) {
+        geojson.features.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: coordinates[0] },
+          properties: {
+            id: tracks[0].sessionId || "single_point",
+            surveyor: username,
+            time: startTime.toISOString()
+          }
+        });
+      } else {
+        geojson.features.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: coordinates },
+          properties: {
+            id: tracks[0].sessionId || "track_line",
+            surveyor: username,
+            start: startTime.toISOString(),
+            end: new Date(tracks[tracks.length - 1].timestamp).toISOString()
+          }
+        });
       }
-    });
 
-    // Blob を Base64 文字列にエンコード
-    trackZipBase64 = await blobToBase64(zipBlob);
-  }
+      const geojsonBlob = new Blob([JSON.stringify(geojson)], { type: "application/json" });
+      const trackZipBase64 = await blobToBase64(geojsonBlob);
 
-  loadingText.innerText = `Googleサーバーへ送信中 (調査 ${surveys.length}件 / GIS-SHP ZIP 1件)...`;
+      const trackLabel = "軌跡データをGoogleドライブへ送信中...";
+      loadingText.innerText = trackLabel;
 
-  const payload = {
-    surveys: surveys,
-    trackZip: trackZipBase64,
-    trackZipName: trackZipName
-  };
+      await postToGASWebWithRetry({
+        surveys: [],
+        trackZip: trackZipBase64,
+        trackZipName: trackZipName
+      }, loadingText, trackLabel);
 
-  try {
-    // CORS対応でPOSTリクエストを送信
-    const response = await fetch(GAS_URL, {
-      method: "POST",
-      mode: "cors",
-      headers: {
-        "Content-Type": "text/plain"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const result = await response.json();
-    console.log("GASレスポンス:", result);
-
-    if (result.status === "success") {
-      loadingOverlay.style.display = "none";
-      const shpMessage = trackZipName ? `\n・軌跡SHPファイル: Googleドライブへ保存完了 (${trackZipName})` : "";
-      alert(`送信成功しました！\n\n・調査データ: ${result.insertedSurveys} 件 (スプレッドシート書き込み完了)${shpMessage}\n\n端末内の送信済みデータをリセットします。`);
-      
-      // 送信成功したため端末のIndexedDBを消去
-      await db.surveys.clear();
       await db.tracks.clear();
-      
-      // UIの再読み込み
       if (trackPolyline) {
         trackPolyline.setLatLngs([]);
       }
-      resetPhotoSelector();
       await initDBStats();
-    } else {
-      throw new Error(result.message || "サーバー側で書き込みエラーが発生しました。");
     }
+
+    loadingOverlay.style.display = "none";
+    const shpMessage = trackZipName ? `\n・軌跡GeoJSONファイル: Googleドライブへ保存完了 (${trackZipName})` : "";
+    alert(`送信完了しました！\n\n・調査データ: ${surveySuccessCount} 件 (スプレッドシート書き込み完了)${shpMessage}`);
+    resetPhotoSelector();
+    await initDBStats();
 
   } catch (err) {
     console.error("GAS送信エラー:", err);
     loadingOverlay.style.display = "none";
-    alert(`送信に失敗しました。\n接続環境を確認するか、時間をおいてやり直してください。\n\n詳細: ${err.message}`);
+    await initDBStats();
+    const remSurveys = await db.surveys.count();
+    const remTracks = await db.tracks.count();
+    alert(`電波状況等により送信が中断されました。\n\n・送信完了: ${surveySuccessCount} 件\n・未送信の調査データ: ${remSurveys} 件\n・未送信の軌跡データ: ${remTracks} 点\n\n未送信データは端末内に安全に保存されています。電波の良い場所で再度送信ボタンを押すと、残りから再開できます。\n\n詳細: ${err.message}`);
   }
 }
 
@@ -1297,6 +1625,7 @@ function listenToOtherUsers() {
     
     let otherActiveCount = 0;
     const now = new Date();
+    const activeUsernames = [];
 
     snapshot.forEach((doc) => {
       const username = doc.id;
@@ -1307,6 +1636,13 @@ function listenToOtherUsers() {
         const data = doc.data();
         if (!data) return;
 
+        // 最終更新からの経過時間（分）を算出
+        const updateTime = data.timestamp ? data.timestamp.toDate() : new Date();
+        const diffMin = Math.round((now - updateTime) / 60000);
+
+        // 12分以上位置更新がないユーザーは非アクティブと判断して除外（10分間隔の定期更新に合わせた安全マージン）
+        if (diffMin > 12) return;
+
         // 緯度・経度の抽出 (超堅牢な parseCoordinate ヘルパーによるフォールバック対応)
         const parsedDocCoords = parseCoordinate(data);
         if (!parsedDocCoords) {
@@ -1314,11 +1650,10 @@ function listenToOtherUsers() {
         }
         const [lat, lng] = parsedDocCoords;
 
+        activeUsernames.push(username);
         otherActiveCount++;
 
-        // 共通で使う時間・カラー変数をここで定義 (ReferenceErrorの解消)
-        const updateTime = data.timestamp ? data.timestamp.toDate() : new Date();
-        const diffMin = Math.round((now - updateTime) / 60000);
+        // 共通で使う時間・カラー変数を定義
         const timeStr = diffMin <= 0 ? "現在" : `${diffMin}分前`;
         const userColor = getUserColor(username);
 
@@ -1447,10 +1782,9 @@ function listenToOtherUsers() {
       }
     });
 
-    // 消えたユーザー（Firestoreからドキュメントがなくなった等）のマーカーおよび軌跡ライン削除
-    const currentDocIds = snapshot.docs.map(d => d.id);
+    // 消えたユーザーや非アクティブ（30分以上無効）になったユーザーのマーカーおよび軌跡ラインを削除
     Object.keys(otherUsersMarkers).forEach(username => {
-      if (!currentDocIds.includes(username)) {
+      if (!activeUsernames.includes(username)) {
         if (otherUsersMarkers[username]) {
           if (map) {
             map.removeLayer(otherUsersMarkers[username]);

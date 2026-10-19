@@ -1,0 +1,36 @@
+{
+  "name": "fr5android",
+  "version": "1.6.3",
+  "main": "index.js",
+  "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
+    "@mapbox/shp-write": "^0.4.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~56.0.8",
+    "expo-file-system": "~56.0.7",
+    "expo-image-manipulator": "~56.0.16",
+    "expo-image-picker": "~56.0.15",
+    "expo-location": "~56.0.15",
+    "expo-sqlite": "~56.0.4",
+    "expo-status-bar": "~56.0.4",
+    "expo-task-manager": "~56.0.16",
+    "firebase": "^12.14.0",
+    "jszip": "^3.10.1",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-background-actions": "^4.1.0",
+    "react-native-maps": "1.27.2",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-webview": "^13.16.1"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "private": true,
+  "devDependencies": {
+    "@expo/ngrok": "^4.1.3"
+  }
+}

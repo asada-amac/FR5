@@ -1,0 +1,34 @@
+# Node / Expo
+node_modules/
+**/node_modules/
+.expo/
+**/.expo/
+dist/
+web-build/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Android build artifacts
+FR5Android/android/.gradle/
+FR5Android/android/build/
+FR5Android/android/app/build/
+FR5Android/android/app/.cxx/
+FR5Android/android/local.properties
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Old APK versions
+FR5_v1.6.2.apk
+
+# Python / QGIS pipeline cache & secrets
+__pycache__/
+**/__pycache__/
+*.pyc
+**/api_key.txt
+.env
+.env.*
+report_fr5_pipeline/photos/

@@ -1,0 +1,56 @@
+{
+  "type": "FeatureCollection",
+  "name": "survey_points_current",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          140.0042916,
+          35.3935809
+        ]
+      },
+      "properties": {
+        "id": "survey_msmegakv_21ndtsdsz",
+        "point_no": 1,
+        "地点番号": 1,
+        "調査者": "個人スマホ",
+        "調査日": "2026-08-10",
+        "調査時間": "7:54:06",
+        "集落名": "大鳥居",
+        "地点分類": "囲いわな",
+        "種名": "イノシシ",
+        "情報詳細": "",
+        "聞き取り対象": "聞き取りなし",
+        "写真": "",
+        "local_photo": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          140.0066967,
+          35.400505
+        ]
+      },
+      "properties": {
+        "id": "survey_msmefh1w_cm0ibv1c7",
+        "point_no": 2,
+        "地点番号": 2,
+        "調査者": "調査スマホ",
+        "調査日": "2026-08-10",
+        "調査時間": "7:53:27",
+        "集落名": "上望陀",
+        "地点分類": "金網柵",
+        "種名": "イノシシ",
+        "情報詳細": "",
+        "聞き取り対象": "聞き取りなし",
+        "写真": "",
+        "local_photo": ""
+      }
+    }
+  ]
+}
